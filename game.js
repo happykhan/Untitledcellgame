@@ -613,8 +613,10 @@ class GameScene extends Phaser.Scene {
 
     strands.forEach((off, oi) => {
       const ba   = baseAngle + off;
-      const perpX = Math.cos(ba + Math.PI / 2), perpY = Math.sin(ba + Math.PI / 2);
-      const backX = Math.cos(ba + Math.PI),     backY = Math.sin(ba + Math.PI);
+      // Rear pole of capsule (long-axis along local Y) is at (-sin, +cos) in world space
+      const backX = -Math.sin(ba),  backY =  Math.cos(ba);
+      // Lateral perpendicular for the sinusoidal wave
+      const perpX =  Math.cos(ba),  perpY =  Math.sin(ba);
       const sx = px + backX * rearDist, sy = py + backY * rearDist;
 
       fg.lineStyle(3, pal.outer, 0.07 * alpha);
@@ -1421,57 +1423,63 @@ class GameScene extends Phaser.Scene {
     }
   }
 
-  // ── Instructions overlay ──────────────────────────────────
+  // ── Instructions overlay — DOM-based for crisp rendering ──
+  // (Phaser text is blurry when camera zoom < 1; DOM bypasses that)
   _showInstructions() {
     this.showingInstructions = true;
-    const w = this.cameras.main.width, h = this.cameras.main.height;
-    const isMobile = w < 700;
+    const isMobile = window.innerWidth < 700;
 
-    const panel = this.add.graphics().setScrollFactor(0).setDepth(300);
-    const pw = Math.min(w - 40, 340), ph = isMobile ? 310 : 280;
-    const px = (w - pw) / 2, py = (h - ph) / 2;
-    panel.fillStyle(0x07071a, 0.94); panel.fillRoundedRect(px, py, pw, ph, 10);
-    panel.lineStyle(1.5, 0xffd060, 0.55); panel.strokeRoundedRect(px, py, pw, ph, 10);
+    const div = document.createElement('div');
+    div.id = 'cell-intro';
+    div.style.cssText = [
+      'position:fixed','top:0','left:0','width:100%','height:100%',
+      'display:flex','align-items:center','justify-content:center',
+      'background:rgba(7,7,26,0.93)','z-index:999',
+      'font-family:monospace,Courier New','cursor:pointer',
+    ].join(';');
 
-    const lines = [
-      ['SURVIVE', 0xffd060, 16, true],
-      ['', 0x556677, 10, false],
-      isMobile
-        ? ['Swipe left half of screen to swim', 0xaaccbb, 11, false]
-        : ['W/↑ thrust  ·  A/D steer  ·  Space tumble', 0xaaccbb, 11, false],
-      ['Cell faces direction of movement', 0x667788, 10, false],
-      ['', 0x556677, 10, false],
-      ['Eat orange ● food to gain energy', 0xff9933, 11, false],
-      ['Collect ◆ gene pickups (max 3)', 0xffd060, 11, false],
-      ['Avoid the large red predator', 0xff4444, 11, false],
-      ['', 0x556677, 10, false],
-      [isMobile ? '÷ DIVIDE button  (need 150% energy)' : 'F key to divide  (need 150% energy)', 0x88ffcc, 11, false],
-      [isMobile ? 'B = antimicrobial  ·  C = gene transfer' : 'B = antimicrobial burst  ·  C = conjugate', 0xaaaaff, 10, false],
-      ['', 0x556677, 10, false],
-      ['tap to begin', 0xffd060, 12, false],
-    ];
+    const move = isMobile
+      ? 'Swipe left side of screen to swim'
+      : 'W/↑ thrust &nbsp;·&nbsp; A/D steer &nbsp;·&nbsp; Space tumble';
+    const div2 = isMobile
+      ? '<b style="color:#88ffcc">÷ DIVIDE</b> button &nbsp;(need 150% energy)'
+      : '<b style="color:#88ffcc">F</b> to divide &nbsp;(need 150% energy)';
+    const bact = isMobile
+      ? '<b style="color:#ff88aa">B</b> antimicrobial &nbsp;·&nbsp; <b style="color:#ffff88">C</b> gene steal'
+      : '<b style="color:#ff88aa">B</b> antimicrobial burst &nbsp;·&nbsp; <b style="color:#ffff88">C</b> conjugate';
 
-    const objs = [panel];
-    let ty = py + 22;
-    lines.forEach(([text, color, size, bold]) => {
-      if (!text) { ty += 6; return; }
-      const t = this.add.text(w / 2, ty, text, {
-        fontSize: size + 'px',
-        fill: '#' + color.toString(16).padStart(6, '0'),
-        fontFamily: 'monospace',
-        fontStyle: bold ? 'bold' : 'normal',
-      }).setScrollFactor(0).setDepth(301).setOrigin(0.5, 0);
-      objs.push(t);
-      ty += size + 7;
-    });
+    div.innerHTML = `
+      <div style="
+        border:1.5px solid rgba(255,208,96,0.5);
+        border-radius:10px;
+        background:rgba(10,10,30,0.97);
+        padding:28px 32px;
+        max-width:340px;
+        width:calc(100% - 48px);
+        text-align:center;
+        line-height:1.7;
+      ">
+        <div style="font-size:20px;font-weight:bold;color:#ffd060;letter-spacing:2px;margin-bottom:12px">SURVIVE</div>
+        <div style="font-size:12px;color:#aaccbb;margin-bottom:4px">${move}</div>
+        <div style="font-size:11px;color:#556677;margin-bottom:12px">Cell faces direction of movement</div>
+        <div style="font-size:12px;color:#ff9933;margin-bottom:3px">Eat orange ● food to gain energy</div>
+        <div style="font-size:12px;color:#ffd060;margin-bottom:3px">Collect ◆ gene pickups (max 3)</div>
+        <div style="font-size:12px;color:#ff5555;margin-bottom:12px">Avoid the large red predator</div>
+        <div style="font-size:12px;color:#aaccbb;margin-bottom:3px">${div2}</div>
+        <div style="font-size:11px;color:#aaaaff;margin-bottom:18px">${bact}</div>
+        <div style="font-size:13px;color:#ffd060;opacity:0.75">tap anywhere to begin</div>
+      </div>`;
+
+    document.body.appendChild(div);
 
     const dismiss = () => {
-      objs.forEach(o => o.destroy());
+      if (!document.body.contains(div)) return;
+      document.body.removeChild(div);
       this.showingInstructions = false;
     };
-    this.time.delayedCall(400, () => {
-      this.input.once('pointerdown', dismiss);
-      this.input.keyboard.once('keydown', dismiss);
+    this.time.delayedCall(300, () => {
+      div.addEventListener('click', dismiss);
+      document.addEventListener('keydown', dismiss, { once: true });
     });
   }
 
