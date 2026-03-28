@@ -119,6 +119,6 @@
   </g>
 
   <!-- Title -->
-  <text x="600" y="560" text-anchor="middle" font-family="monospace, Courier New" font-size="52" font-weight="bold" fill="#ffd060" opacity="0.95">CELL GAME</text>
+  <text x="600" y="560" text-anchor="middle" font-family="monospace, Courier New" font-size="52" font-weight="bold" fill="#ffd060" opacity="0.95">UNTITLED CELL GAME</text>
   <text x="600" y="595" text-anchor="middle" font-family="monospace, Courier New" font-size="18" fill="#aaccbb" opacity="0.75">survive · eat · evolve · divide</text>
 </svg>
