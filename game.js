@@ -338,7 +338,7 @@ class GameScene extends Phaser.Scene {
     this._spawnGenes(20);
 
     this.player = this.physics.add.image(WORLD_W / 2, WORLD_H / 2, 'phys');
-    this.player.setAlpha(0).setCollideWorldBounds(true)
+    this.player.setAlpha(0).setCollideWorldBounds(true).setBounce(1, 1)
                .setDamping(true).setDrag(0.90).setMaxVelocity(340).setDepth(10);
     this.player.body.setCircle(22, -20, -20);
 
@@ -355,7 +355,7 @@ class GameScene extends Phaser.Scene {
       Phaser.Math.Between(600, WORLD_H - 600),
       'phys'
     );
-    this.predator.setAlpha(0).setCollideWorldBounds(true)
+    this.predator.setAlpha(0).setCollideWorldBounds(true).setBounce(0.8, 0.8)
                  .setDamping(true).setDrag(0.95).setMaxVelocity(150).setDepth(8);
     this.predator.body.setCircle(58, -56, -56);
 
@@ -711,7 +711,7 @@ class GameScene extends Phaser.Scene {
       const x = Phaser.Math.Between(300, WORLD_W - 300);
       const y = Phaser.Math.Between(300, WORLD_H - 300);
       const npc = this.physics.add.image(x, y, 'phys');
-      npc.setAlpha(0).setCollideWorldBounds(true).setDamping(true).setDrag(0.93).setMaxVelocity(140).setDepth(10);
+      npc.setAlpha(0).setCollideWorldBounds(true).setBounce(1, 1).setDamping(true).setDrag(0.93).setMaxVelocity(140).setDepth(10);
       npc.body.setCircle(16, -14, -14);
       npc.hp         = 2;
       npc.genes      = new Set();
@@ -937,7 +937,7 @@ class GameScene extends Phaser.Scene {
   _completeFission() {
     const dx = Phaser.Math.Between(-55, 55), dy = Phaser.Math.Between(-55, 55);
     const d  = this.physics.add.image(this.player.x + dx, this.player.y + dy, 'phys');
-    d.setAlpha(0).setCollideWorldBounds(true).setDamping(true).setDrag(0.93).setMaxVelocity(200).setDepth(10);
+    d.setAlpha(0).setCollideWorldBounds(true).setBounce(1, 1).setDamping(true).setDrag(0.93).setMaxVelocity(200).setDepth(10);
     d.body.setCircle(16, -14, -14);
     d.hp = 3; d.genes = new Set(this.activeGenes);
     d.wanderDir = Math.random() * Math.PI * 2; d.wanderTimer = 0; d.flagPhase = 0; d.angle = 0;
