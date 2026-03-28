@@ -63,8 +63,9 @@ const NPC_PALS = [PAL.npc0, PAL.npc1, PAL.npc2, PAL.npc3];
 
 // ── Graphics helpers ──────────────────────────────────────
 
+// Rotated ellipse path (used for nucleoid and round inner structures)
 function ellipsePath(g, cx, cy, rx, ry, cos, sin, segs) {
-  segs = segs || 30;
+  segs = segs || 28;
   g.beginPath();
   for (let i = 0; i <= segs; i++) {
     const a = (i / segs) * Math.PI * 2;
@@ -75,8 +76,9 @@ function ellipsePath(g, cx, cy, rx, ry, cos, sin, segs) {
   g.closePath();
 }
 
+// Triangle-fan fill for a rotated ellipse
 function fillEllipse(g, cx, cy, rx, ry, cos, sin, segs) {
-  segs = segs || 28;
+  segs = segs || 24;
   for (let i = 0; i < segs; i++) {
     const a1 = (i / segs) * Math.PI * 2, a2 = ((i + 1) / segs) * Math.PI * 2;
     g.fillTriangle(
@@ -89,83 +91,134 @@ function fillEllipse(g, cx, cy, rx, ry, cos, sin, segs) {
   }
 }
 
-// Full ornate gram-negative bacterium
-function drawBacteria(g, cx, cy, angle, rx, ry, pal, alpha) {
+// Capsule (stadium) path — proper rod bacterium shape.
+// Major axis along local Y. h = ry - rx is the straight-side half-length.
+// Traces: top semicircle (angles π→2π) + right-side lineTo + bottom semicircle (0→π) + closePath (left side).
+function capsulePath(g, cx, cy, rx, ry, cos, sin, segs) {
+  segs = segs || 14;
+  const h = Math.max(0, ry - rx);
+  const W = (lx, ly) => [cx + lx*cos - ly*sin, cy + lx*sin + ly*cos];
+  g.beginPath();
+  // Top cap
+  for (let i = 0; i <= segs; i++) {
+    const a = Math.PI + (i / segs) * Math.PI;
+    const [wx, wy] = W(Math.cos(a) * rx, -h + Math.sin(a) * rx);
+    i === 0 ? g.moveTo(wx, wy) : g.lineTo(wx, wy);
+  }
+  // Bottom cap (lineTo first point continues the right straight side automatically)
+  for (let i = 0; i <= segs; i++) {
+    const a = (i / segs) * Math.PI;
+    const [wx, wy] = W(Math.cos(a) * rx, h + Math.sin(a) * rx);
+    g.lineTo(wx, wy);
+  }
+  g.closePath(); // closes left straight side
+}
+
+// Triangle-fan fill for capsule
+function fillCapsule(g, cx, cy, rx, ry, cos, sin, segs) {
+  segs = segs || 14;
+  const h = Math.max(0, ry - rx);
+  const vx = [], vy = [];
+  for (let i = 0; i <= segs; i++) {
+    const a = Math.PI + (i / segs) * Math.PI;
+    vx.push(cx + Math.cos(a)*rx*cos - (-h + Math.sin(a)*rx)*sin);
+    vy.push(cy + Math.cos(a)*rx*sin + (-h + Math.sin(a)*rx)*cos);
+  }
+  for (let i = 0; i <= segs; i++) {
+    const a = (i / segs) * Math.PI;
+    vx.push(cx + Math.cos(a)*rx*cos - (h + Math.sin(a)*rx)*sin);
+    vy.push(cy + Math.cos(a)*rx*sin + (h + Math.sin(a)*rx)*cos);
+  }
+  const n = vx.length;
+  for (let i = 0; i < n - 1; i++) {
+    g.fillTriangle(cx, cy, vx[i], vy[i], vx[i+1], vy[i+1]);
+  }
+  g.fillTriangle(cx, cy, vx[n-1], vy[n-1], vx[0], vy[0]);
+}
+
+// Capsule path with subtle organic membrane wobble
+function capsulePathWobble(g, cx, cy, rx, ry, cos, sin, phase, amp) {
+  const segs = 20, h = Math.max(0, ry - rx);
+  g.beginPath();
+  let first = true;
+  const pt = (a, ly0) => {
+    const w = 1 + Math.sin(a * 2.5 + phase) * amp / (rx + 1);
+    const lx = Math.cos(a) * rx * w, ly = ly0 + Math.sin(a) * rx * w;
+    const wx = cx + lx*cos - ly*sin, wy = cy + lx*sin + ly*cos;
+    first ? (g.moveTo(wx, wy), first = false) : g.lineTo(wx, wy);
+  };
+  for (let i = 0; i <= segs; i++) pt(Math.PI + (i/segs)*Math.PI, -h);
+  for (let i = 0; i <= segs; i++) pt((i/segs)*Math.PI, h);
+  g.closePath();
+}
+
+// Full ornate gram-negative rod — fluid and ethereal rendering
+// phase: animation phase for membrane wobble (pass cell's flagPhase)
+function drawBacteria(g, cx, cy, angle, rx, ry, pal, alpha, phase) {
+  phase = phase || 0;
   const cos = Math.cos(angle), sin = Math.sin(angle);
   const a = alpha;
 
-  // Outer bloom glow
-  g.lineStyle(rx * 3.5, pal.outer, 0.06 * a);
-  ellipsePath(g, cx, cy, rx + 1, ry + 1, cos, sin); g.strokePath();
+  // Layered soft glow — 4 concentric diffuse halos build up from outside in
+  g.lineStyle(rx * 5,   pal.outer, 0.018 * a); capsulePath(g, cx, cy, rx+5, ry+5, cos, sin); g.strokePath();
+  g.lineStyle(rx * 3.5, pal.outer, 0.030 * a); capsulePath(g, cx, cy, rx+3, ry+3, cos, sin); g.strokePath();
+  g.lineStyle(rx * 2,   pal.og,    0.055 * a); capsulePath(g, cx, cy, rx+1.5, ry+1.5, cos, sin); g.strokePath();
+  g.lineStyle(rx * 1,   pal.og,    0.10 * a);  capsulePath(g, cx, cy, rx+0.5, ry+0.5, cos, sin); g.strokePath();
 
-  // Periplasmic space fill
-  g.fillStyle(pal.peri, 0.72 * a);
-  fillEllipse(g, cx, cy, rx, ry, cos, sin);
+  // Periplasm — translucent
+  g.fillStyle(pal.peri, 0.45 * a);
+  fillCapsule(g, cx, cy, rx, ry, cos, sin);
 
-  // Cytoplasm fill
-  g.fillStyle(pal.cyto, 0.93 * a);
-  fillEllipse(g, cx, cy, rx * 0.73, ry * 0.73, cos, sin);
+  // Cytoplasm — semi-transparent
+  g.fillStyle(pal.cyto, 0.80 * a);
+  fillCapsule(g, cx, cy, rx * 0.73, ry * 0.73, cos, sin);
 
-  // Nucleoid blob
-  g.fillStyle(pal.nuc, 0.36 * a);
-  fillEllipse(g, cx, cy, rx * 0.42, ry * 0.30, cos, sin);
-  g.lineStyle(0.9, pal.nuc, 0.6 * a);
-  ellipsePath(g, cx, cy, rx * 0.42, ry * 0.30, cos, sin); g.strokePath();
+  // Nucleoid — soft luminous double-glow (no hard line)
+  g.fillStyle(pal.nuc, 0.18 * a);
+  fillEllipse(g, cx, cy, rx * 0.62, ry * 0.32, cos, sin);
+  g.fillStyle(pal.nuc, 0.42 * a);
+  fillEllipse(g, cx, cy, rx * 0.38, ry * 0.20, cos, sin);
 
   if (DETAIL) {
-    // Ribosomes — ring of tiny dots
-    g.fillStyle(pal.ribo, 0.78 * a);
+    // Ribosomes — subtle soft dots
+    g.fillStyle(pal.ribo, 0.45 * a);
     for (let i = 0; i < 10; i++) {
       const t = (i / 10) * Math.PI * 2;
-      const lx = Math.cos(t) * rx * 0.55, ly = Math.sin(t) * ry * 0.52;
-      g.fillCircle(cx + lx * cos - ly * sin, cy + lx * sin + ly * cos, 1.1);
+      const lx = Math.cos(t) * rx * 0.52, ly = Math.sin(t) * ry * 0.50;
+      g.fillCircle(cx + lx*cos - ly*sin, cy + lx*sin + ly*cos, 1.1);
     }
   }
 
-  // Inclusion granules (bright spots with outline)
+  // Inclusion granules — soft glow, no hard outline
   pal.gran.forEach(function(gr) {
     const wx = cx + (gr[0] * rx) * cos - (gr[1] * ry) * sin;
     const wy = cy + (gr[0] * rx) * sin + (gr[1] * ry) * cos;
-    g.fillStyle(gr[3], 0.82 * a);   g.fillCircle(wx, wy, gr[2]);
-    g.lineStyle(0.7, gr[3], alpha); g.strokeCircle(wx, wy, gr[2]);
+    g.fillStyle(gr[3], 0.35 * a); g.fillCircle(wx, wy, gr[2] * 1.8);
+    g.fillStyle(gr[3], 0.75 * a); g.fillCircle(wx, wy, gr[2] * 0.8);
   });
 
-  // Inner (cytoplasmic) membrane
-  g.lineStyle(1.1, pal.inner, 0.62 * a);
-  ellipsePath(g, cx, cy, rx * 0.73, ry * 0.73, cos, sin); g.strokePath();
+  // Inner membrane — soft, glowing
+  g.lineStyle(1.2, pal.inner, 0.32 * a);
+  capsulePath(g, cx, cy, rx * 0.73, ry * 0.73, cos, sin); g.strokePath();
 
-  // Outer membrane — crisp bright
-  g.lineStyle(2.0, pal.outer, alpha);
-  ellipsePath(g, cx, cy, rx, ry, cos, sin); g.strokePath();
+  // Outer membrane — organic wobble, luminous
+  g.lineStyle(1.6, pal.outer, 0.75 * a);
+  capsulePathWobble(g, cx, cy, rx, ry, cos, sin, phase, 0.7); g.strokePath();
 
-  // Outer halo
-  g.lineStyle(3.5, pal.og, 0.24 * a);
-  ellipsePath(g, cx, cy, rx + 1.2, ry + 1.2, cos, sin); g.strokePath();
-
-  if (DETAIL) {
-    // LPS surface fuzz — tiny radial stubs
-    g.lineStyle(0.8, pal.outer, 0.36 * a);
-    for (let i = 0; i < 14; i++) {
-      const t = (i / 14) * Math.PI * 2;
-      const ex1 = Math.cos(t) * rx, ey1 = Math.sin(t) * ry;
-      const ex2 = Math.cos(t) * (rx + 3), ey2 = Math.sin(t) * (ry + 3);
-      g.lineBetween(
-        cx + ex1*cos - ey1*sin, cy + ex1*sin + ey1*cos,
-        cx + ex2*cos - ey2*sin, cy + ex2*sin + ey2*cos
-      );
-    }
-  }
+  // Crisp inner edge of membrane (double-membrane suggestion)
+  g.lineStyle(0.6, pal.og, 0.4 * a);
+  capsulePathWobble(g, cx, cy, rx * 0.93, ry * 0.93, cos, sin, phase + 0.3, 0.4); g.strokePath();
 }
 
-// Quick simplified bacterium — for background ghost cells
+// Simplified rod — for background ghost cells (fast, capsule shape)
 function drawBacteriaSimple(g, cx, cy, angle, rx, ry, col, alpha) {
   const cos = Math.cos(angle), sin = Math.sin(angle);
   g.lineStyle(rx * 2.5, col, 0.04 * alpha);
-  ellipsePath(g, cx, cy, rx, ry, cos, sin); g.strokePath();
+  capsulePath(g, cx, cy, rx, ry, cos, sin); g.strokePath();
   g.fillStyle(col, 0.08 * alpha);
-  fillEllipse(g, cx, cy, rx, ry, cos, sin);
+  fillCapsule(g, cx, cy, rx, ry, cos, sin);
   g.lineStyle(1.2, col, 0.3 * alpha);
-  ellipsePath(g, cx, cy, rx, ry, cos, sin); g.strokePath();
+  capsulePath(g, cx, cy, rx, ry, cos, sin); g.strokePath();
 }
 
 // Eukaryotic predator with full organelle detail
@@ -425,7 +478,7 @@ class GameScene extends Phaser.Scene {
     const ry = 52 * CELL_S * this.fissionScale.y;
     const angle = this.player.rotation;
 
-    drawBacteria(g, this.player.x, this.player.y, angle, rx, ry, pal, pa);
+    drawBacteria(g, this.player.x, this.player.y, angle, rx, ry, pal, pa, this.flagPhase);
     this._drawOrganelles(og, this.player.x, this.player.y, angle, pal.outer, pa, CELL_S);
 
     this.flagPhase += 0.12 + this.flagSpeed * 0.18;
@@ -440,14 +493,14 @@ class GameScene extends Phaser.Scene {
     this.daughters.forEach(d => {
       if (!d.active) return;
       const da = Phaser.Math.DegToRad(d.angle - 90);
-      drawBacteria(g, d.x, d.y, da, 10 * CELL_S, 38 * CELL_S, PAL.daughter, 1.0);
+      drawBacteria(g, d.x, d.y, da, 10 * CELL_S, 38 * CELL_S, PAL.daughter, 1.0, d.flagPhase);
       this._drawFlagellum(fg, d.x, d.y, da, d.flagPhase, PAL.daughter, 1.0, 42 * CELL_S);
     });
 
     this.npcCells.forEach(npc => {
       if (!npc.active) return;
       const na = Phaser.Math.DegToRad(npc.angle - 90);
-      drawBacteria(g, npc.x, npc.y, na, 10 * CELL_S, 38 * CELL_S, npc.palette, 1.0);
+      drawBacteria(g, npc.x, npc.y, na, 10 * CELL_S, 38 * CELL_S, npc.palette, 1.0, npc.flagPhase);
       this._drawFlagellum(fg, npc.x, npc.y, na, npc.flagPhase, npc.palette, 1.0, 42 * CELL_S);
     });
   }
@@ -993,18 +1046,31 @@ class GameScene extends Phaser.Scene {
   }
 
   _buildActionButtons(w, h) {
+    // DIVIDE — large prominent pill button at bottom right
+    const divGfx = this.add.graphics().setScrollFactor(0).setDepth(199);
+    this.divGfx = divGfx;
+    this.hudCon.add(divGfx);
+    const divBtn = this.add.text(w - 46, h - 52, '÷ DIVIDE', {
+      fontSize: '15px', fill: '#ffd060', fontFamily: 'monospace', fontStyle: 'bold'
+    }).setScrollFactor(0).setDepth(200).setOrigin(0.5).setAlpha(0.35).setInteractive({ useHandCursor: false });
+    divBtn.on('pointerdown', () => { this.touchFission = true;  divBtn.setAlpha(1.0); });
+    divBtn.on('pointerup',   () => { this.touchFission = false; divBtn.setAlpha(0.35); });
+    divBtn.on('pointerout',  () => { this.touchFission = false; divBtn.setAlpha(0.35); });
+    this.hudCon.add(divBtn);
+    this.divBtn = divBtn;
+
+    // Secondary action buttons — right edge
     const btns = [
-      { label: 'F', y: h-150, key: 'touchFission', color: 0xffd060 },
-      { label: 'B', y: h-100, key: 'touchBact',    color: 0xff88aa },
-      { label: 'C', y: h-50,  key: 'touchConj',    color: 0xffff88 },
+      { label: 'B', y: h-110, key: 'touchBact', color: 0xff88aa },
+      { label: 'C', y: h-60,  key: 'touchConj', color: 0xffff88 },
     ];
     btns.forEach(b => {
       const hexStr = '#' + b.color.toString(16).padStart(6, '0');
-      const btn = this.add.text(w - 28, b.y, b.label, {
+      const btn = this.add.text(w - 20, b.y, b.label, {
         fontSize: '13px', fill: hexStr, fontFamily: 'monospace'
       }).setScrollFactor(0).setDepth(200).setOrigin(0.5).setAlpha(0.3).setInteractive({ useHandCursor: false });
       const circ = this.add.graphics().setScrollFactor(0).setDepth(199);
-      circ.lineStyle(1, b.color, 0.3); circ.strokeCircle(w - 28, b.y, 16);
+      circ.lineStyle(1, b.color, 0.3); circ.strokeCircle(w - 20, b.y, 16);
       this.hudCon.add(circ);
       btn.on('pointerdown', () => { this[b.key] = true;  btn.setAlpha(1.0); });
       btn.on('pointerup',   () => { this[b.key] = false; btn.setAlpha(0.3); });
@@ -1012,12 +1078,13 @@ class GameScene extends Phaser.Scene {
       this.hudCon.add(btn);
     });
 
+    // Tumble — bottom-left
     const tcirc = this.add.graphics().setScrollFactor(0).setDepth(199);
-    tcirc.lineStyle(1, 0xaabbcc, 0.3); tcirc.strokeCircle(28, h-130, 16);
+    tcirc.lineStyle(1, 0xaabbcc, 0.3); tcirc.strokeCircle(28, h-60, 16);
     this.hudCon.add(tcirc);
 
-    const tumbleBtn = this.add.text(28, h-130, 'T', {
-      fontSize: '13px', fill: '#aabbcc', fontFamily: 'monospace'
+    const tumbleBtn = this.add.text(28, h-60, '↺', {
+      fontSize: '18px', fill: '#aabbcc', fontFamily: 'sans-serif'
     }).setScrollFactor(0).setDepth(200).setOrigin(0.5).setAlpha(0.3).setInteractive();
     tumbleBtn.on('pointerdown', () => {
       tumbleBtn.setAlpha(1.0);
@@ -1046,12 +1113,16 @@ class GameScene extends Phaser.Scene {
     const sec = Math.floor((time - this.startTime) / 1000);
     this.scoreText.setText(`${this.score}  ${this.killCount > 0 ? this.killCount + '✕' : ''}`);
 
-    // Fission ready — pulse when available
-    if (this.energy > 150) {
-      this.fissText.setAlpha(0.6 + Math.sin(time * 0.006) * 0.4);
-    } else {
-      this.fissText.setAlpha(0);
-    }
+    // Divide button — pulse gold when ready, dim when not
+    const canDiv = this.energy > 150 && !this.fissioning;
+    const divAlpha = canDiv ? (0.55 + Math.sin(time * 0.007) * 0.45) : 0.22;
+    this.divBtn.setAlpha(divAlpha);
+    this.divGfx.clear();
+    this.divGfx.lineStyle(1.5, canDiv ? 0xffd060 : 0x554422, canDiv ? divAlpha : 0.2);
+    const w2 = this.cameras.main.width;
+    this.divGfx.strokeRoundedRect(w2 - 102, h - 68, 112, 32, 8);
+    // Desktop hint
+    this.fissText.setAlpha(canDiv ? 0.5 : 0);
 
     this.bactText.setText(this.bacterioTimer > 0 ? `B ${Math.ceil(this.bacterioTimer/1000)}s` : 'B ready');
 
@@ -1214,8 +1285,19 @@ class GameScene extends Phaser.Scene {
       g.strokeCircle(cx, cy, 3 + Math.random() * 5);
     }
 
+    // Bioluminescent glow patches — scattered soft blooms
+    const glowCols = [0x00e8d0, 0xff44bb, 0xaa55ff, 0x55ff88, 0xffd060, 0x4488ff];
+    for (let i = 0; i < 40; i++) {
+      const x = Phaser.Math.Between(100, WORLD_W-100);
+      const y = Phaser.Math.Between(100, WORLD_H-100);
+      const r = 45 + Math.random() * 120;
+      const c = glowCols[i % 6];
+      g.lineStyle(r * 0.9, c, 0.008 + Math.random() * 0.006);
+      g.strokeCircle(x, y, r * 0.25);
+    }
+
     // Faint radial orientation markers
-    g.lineStyle(0.5, 0x1a1a40, 0.25);
+    g.lineStyle(0.5, 0x1a1a40, 0.22);
     for (let r = 400; r < 1600; r += 400) {
       g.strokeCircle(WORLD_W/2, WORLD_H/2, r);
     }
