@@ -1,30 +1,14 @@
 // ============================================================
-//  Untitled Cell Game v3  —  Vector rendering, FISH palette
-//  All cells drawn as crisp Graphics each frame (no texture rotation)
+//  Untitled Cell Game v4  —  Ornate jeweled microscopy aesthetic
 // ============================================================
 
 const WORLD_W = 3200;
 const WORLD_H = 3200;
 
-// Scale cell size to screen — phones get smaller cells
 const _minDim = Math.min(window.innerWidth, window.innerHeight);
-const CELL_S  = Math.max(0.45, Math.min(1.0, _minDim / 550));  // 0.45–1.0
-// Zoom out more on smaller screens so the world feels bigger
-const ZOOM    = Math.max(0.55, Math.min(1.0, _minDim / 480));
-
-// Fluorescence In Situ Hybridisation palette
-const COL = {
-  bg:        0x000008,
-  cell:      0x00ff66,   // FITC green
-  flagellum: 0x00cc44,
-  food:      0xff8800,   // Cy3 orange
-  predator:  0xff2200,   // Texas Red
-  npc:       0x4488ff,   // DAPI blue
-  daughter:  0x88ffcc,
-  bacterio:  0xff44aa,
-  pilus:     0xffff55,
-  hud:       0x445544,
-};
+const CELL_S  = Math.max(0.5, Math.min(1.1, _minDim / 500));
+const ZOOM    = Math.max(0.42, Math.min(0.78, _minDim / 550));
+const DETAIL  = _minDim >= 460;  // ribosomes + LPS fuzz on larger screens only
 
 const GENES = {
   HSP:      { color: 0xff4400, symbol: 'H', desc: 'heat resist' },
@@ -35,112 +19,247 @@ const GENES = {
 };
 const GENE_KEYS = Object.keys(GENES);
 
-// ─────────────────────────────────────────────────────────────
-//  Graphics helpers
-// ─────────────────────────────────────────────────────────────
+// ── Jeweled microscopy palettes ───────────────────────────
+// outer=membrane, og=outer glow, peri=periplasm, cyto=cytoplasm,
+// inner=inner membrane, nuc=nucleoid, ribo=ribosomes,
+// gran=[[unit_x, unit_y, radius, color], ...] inclusion bodies
+const PAL = {
+  player: {
+    outer:0xffd060, og:0xffee99, peri:0x7a4000, cyto:0x180c00,
+    inner:0xcc9900, nuc:0xff9900, ribo:0xffe888,
+    gran:[[-0.22,-0.38,2.4,0xff5500],[0.18,0.32,1.9,0xffbb00],[0.0,-0.18,1.5,0xff8800]],
+  },
+  npc0: { // cyan/teal
+    outer:0x00e8d0, og:0x88ffee, peri:0x004444, cyto:0x001616,
+    inner:0x00bbaa, nuc:0x00ffcc, ribo:0xaaffee,
+    gran:[[-0.2,-0.3,2.1,0xff8800],[0.2,0.25,1.7,0x00ffff]],
+  },
+  npc1: { // rose/magenta
+    outer:0xff44bb, og:0xff99dd, peri:0x660033, cyto:0x1e000e,
+    inner:0xcc3388, nuc:0xff66cc, ribo:0xffccee,
+    gran:[[-0.15,-0.32,2.2,0xff2244],[0.2,0.22,1.8,0xffaa00]],
+  },
+  npc2: { // lime/green
+    outer:0x55ff88, og:0xaaffcc, peri:0x004422, cyto:0x001308,
+    inner:0x33dd66, nuc:0x88ffaa, ribo:0xccffdd,
+    gran:[[-0.18,-0.28,2.0,0xffee00],[0.22,0.2,1.6,0x00ffaa]],
+  },
+  npc3: { // violet/purple
+    outer:0xaa55ff, og:0xcc99ff, peri:0x330055, cyto:0x0e001c,
+    inner:0x8833ee, nuc:0xcc88ff, ribo:0xeeccff,
+    gran:[[-0.2,-0.3,2.1,0xff44ff],[0.18,0.28,1.7,0x4488ff]],
+  },
+  daughter: {
+    outer:0x88ffee, og:0xccffff, peri:0x003344, cyto:0x001018,
+    inner:0x55ddcc, nuc:0xaaffee, ribo:0xddfff8,
+    gran:[[-0.18,-0.3,1.9,0x00ffcc],[0.2,0.22,1.6,0x88aaff]],
+  },
+  predator: {
+    outer:0xff2200, og:0xff8866, peri:0x440000, cyto:0x180000,
+    inner:0xcc2200, nuc:0xff6600, ribo:0xff9966, gran:[],
+  },
+};
+const NPC_PALS = [PAL.npc0, PAL.npc1, PAL.npc2, PAL.npc3];
 
-// Plot a rotated ellipse path (no strokePath call — caller does it)
-function ellipsePath(g, cx, cy, rx, ry, cos, sin, segs = 30) {
+// ── Graphics helpers ──────────────────────────────────────
+
+function ellipsePath(g, cx, cy, rx, ry, cos, sin, segs) {
+  segs = segs || 30;
   g.beginPath();
   for (let i = 0; i <= segs; i++) {
-    const a  = (i / segs) * Math.PI * 2;
+    const a = (i / segs) * Math.PI * 2;
     const ex = Math.cos(a) * rx, ey = Math.sin(a) * ry;
-    const wx = cx + ex * cos - ey * sin;
-    const wy = cy + ex * sin + ey * cos;
+    const wx = cx + ex * cos - ey * sin, wy = cy + ex * sin + ey * cos;
     i === 0 ? g.moveTo(wx, wy) : g.lineTo(wx, wy);
   }
   g.closePath();
 }
 
-// Fill a rotated ellipse using triangle fan
-function fillEllipse(g, cx, cy, rx, ry, cos, sin, segs = 28) {
+function fillEllipse(g, cx, cy, rx, ry, cos, sin, segs) {
+  segs = segs || 28;
   for (let i = 0; i < segs; i++) {
     const a1 = (i / segs) * Math.PI * 2, a2 = ((i + 1) / segs) * Math.PI * 2;
-    const p1x = cx + (Math.cos(a1)*rx)*cos - (Math.sin(a1)*ry)*sin;
-    const p1y = cy + (Math.cos(a1)*rx)*sin + (Math.sin(a1)*ry)*cos;
-    const p2x = cx + (Math.cos(a2)*rx)*cos - (Math.sin(a2)*ry)*sin;
-    const p2y = cy + (Math.cos(a2)*rx)*sin + (Math.sin(a2)*ry)*cos;
-    g.fillTriangle(cx, cy, p1x, p1y, p2x, p2y);
+    g.fillTriangle(
+      cx, cy,
+      cx + Math.cos(a1)*rx*cos - Math.sin(a1)*ry*sin,
+      cy + Math.cos(a1)*rx*sin + Math.sin(a1)*ry*cos,
+      cx + Math.cos(a2)*rx*cos - Math.sin(a2)*ry*sin,
+      cy + Math.cos(a2)*rx*sin + Math.sin(a2)*ry*cos
+    );
   }
 }
 
-// Draw a rod-shaped bacterium — clean, minimal
-function drawBacteria(g, cx, cy, angle, rx, ry, color, alpha) {
+// Full ornate gram-negative bacterium
+function drawBacteria(g, cx, cy, angle, rx, ry, pal, alpha) {
   const cos = Math.cos(angle), sin = Math.sin(angle);
   const a = alpha;
 
-  // Single soft bloom (one wide pass, not stacked rings)
-  g.lineStyle(rx * 2.2, color, 0.055 * a);
-  ellipsePath(g, cx, cy, rx, ry, cos, sin); g.strokePath();
+  // Outer bloom glow
+  g.lineStyle(rx * 3.5, pal.outer, 0.06 * a);
+  ellipsePath(g, cx, cy, rx + 1, ry + 1, cos, sin); g.strokePath();
 
-  // Inner glow halo
-  g.lineStyle(5, color, 0.18 * a);
-  ellipsePath(g, cx, cy, rx + 2, ry + 2, cos, sin); g.strokePath();
-
-  // Interior — very faint fill so it doesn't look hollow
-  g.fillStyle(color, 0.06 * a);
+  // Periplasmic space fill
+  g.fillStyle(pal.peri, 0.72 * a);
   fillEllipse(g, cx, cy, rx, ry, cos, sin);
 
-  // Membrane — crisp, bright
-  g.lineStyle(1.6, color, alpha);
+  // Cytoplasm fill
+  g.fillStyle(pal.cyto, 0.93 * a);
+  fillEllipse(g, cx, cy, rx * 0.73, ry * 0.73, cos, sin);
+
+  // Nucleoid blob
+  g.fillStyle(pal.nuc, 0.36 * a);
+  fillEllipse(g, cx, cy, rx * 0.42, ry * 0.30, cos, sin);
+  g.lineStyle(0.9, pal.nuc, 0.6 * a);
+  ellipsePath(g, cx, cy, rx * 0.42, ry * 0.30, cos, sin); g.strokePath();
+
+  if (DETAIL) {
+    // Ribosomes — ring of tiny dots
+    g.fillStyle(pal.ribo, 0.78 * a);
+    for (let i = 0; i < 10; i++) {
+      const t = (i / 10) * Math.PI * 2;
+      const lx = Math.cos(t) * rx * 0.55, ly = Math.sin(t) * ry * 0.52;
+      g.fillCircle(cx + lx * cos - ly * sin, cy + lx * sin + ly * cos, 1.1);
+    }
+  }
+
+  // Inclusion granules (bright spots with outline)
+  pal.gran.forEach(function(gr) {
+    const wx = cx + (gr[0] * rx) * cos - (gr[1] * ry) * sin;
+    const wy = cy + (gr[0] * rx) * sin + (gr[1] * ry) * cos;
+    g.fillStyle(gr[3], 0.82 * a);   g.fillCircle(wx, wy, gr[2]);
+    g.lineStyle(0.7, gr[3], alpha); g.strokeCircle(wx, wy, gr[2]);
+  });
+
+  // Inner (cytoplasmic) membrane
+  g.lineStyle(1.1, pal.inner, 0.62 * a);
+  ellipsePath(g, cx, cy, rx * 0.73, ry * 0.73, cos, sin); g.strokePath();
+
+  // Outer membrane — crisp bright
+  g.lineStyle(2.0, pal.outer, alpha);
   ellipsePath(g, cx, cy, rx, ry, cos, sin); g.strokePath();
 
-  // Nucleoid — single dim inner ellipse, no dots
-  g.lineStyle(0.8, color, 0.28 * a);
-  ellipsePath(g, cx, cy, rx * 0.5, ry * 0.38, cos, sin); g.strokePath();
+  // Outer halo
+  g.lineStyle(3.5, pal.og, 0.24 * a);
+  ellipsePath(g, cx, cy, rx + 1.2, ry + 1.2, cos, sin); g.strokePath();
+
+  if (DETAIL) {
+    // LPS surface fuzz — tiny radial stubs
+    g.lineStyle(0.8, pal.outer, 0.36 * a);
+    for (let i = 0; i < 14; i++) {
+      const t = (i / 14) * Math.PI * 2;
+      const ex1 = Math.cos(t) * rx, ey1 = Math.sin(t) * ry;
+      const ex2 = Math.cos(t) * (rx + 3), ey2 = Math.sin(t) * (ry + 3);
+      g.lineBetween(
+        cx + ex1*cos - ey1*sin, cy + ex1*sin + ey1*cos,
+        cx + ex2*cos - ey2*sin, cy + ex2*sin + ey2*cos
+      );
+    }
+  }
 }
 
-// Draw the predator (eukaryote blob — larger, menacing)
-function drawPredator(g, cx, cy, rx, ry, alpha) {
-  const c = COL.predator, a = alpha;
+// Quick simplified bacterium — for background ghost cells
+function drawBacteriaSimple(g, cx, cy, angle, rx, ry, col, alpha) {
+  const cos = Math.cos(angle), sin = Math.sin(angle);
+  g.lineStyle(rx * 2.5, col, 0.04 * alpha);
+  ellipsePath(g, cx, cy, rx, ry, cos, sin); g.strokePath();
+  g.fillStyle(col, 0.08 * alpha);
+  fillEllipse(g, cx, cy, rx, ry, cos, sin);
+  g.lineStyle(1.2, col, 0.3 * alpha);
+  ellipsePath(g, cx, cy, rx, ry, cos, sin); g.strokePath();
+}
+
+// Eukaryotic predator with full organelle detail
+function drawPredator(g, cx, cy, rx, ry, alpha, phase) {
+  const pal = PAL.predator;
+  const a = alpha;
+
   // Bloom
-  g.lineStyle(rx * 1.8, c, 0.05 * a); g.strokeEllipse(cx, cy, rx*2, ry*2);
-  // Inner glow
-  g.lineStyle(8, c, 0.18 * a);        g.strokeEllipse(cx, cy, rx*2+4, ry*2+4);
-  // Fill
-  g.fillStyle(c, 0.07 * a);           g.fillEllipse(cx, cy, rx*2, ry*2);
-  // Membrane
-  g.lineStyle(2, c, alpha);            g.strokeEllipse(cx, cy, rx*2, ry*2);
-  // Nucleus (round, eukaryote)
-  g.lineStyle(1.2, c, 0.45 * a);      g.strokeCircle(cx, cy, rx * 0.3);
-  g.fillStyle(c, 0.12 * a);           g.fillCircle(cx, cy, rx * 0.18);
+  g.lineStyle(rx * 2.5, pal.outer, 0.04 * a);
+  g.strokeEllipse(cx, cy, rx * 2, ry * 2);
+
+  // Cytoplasm
+  g.fillStyle(pal.cyto, 0.9 * a);
+  g.fillEllipse(cx, cy, rx * 2, ry * 2);
+
+  // ER-like interior reticulum
+  g.lineStyle(0.9, pal.inner, 0.28 * a);
+  for (let i = 0; i < 4; i++) {
+    const t0 = (i / 4) * Math.PI * 2;
+    g.lineBetween(
+      cx + Math.cos(t0) * rx * 0.6, cy + Math.sin(t0) * ry * 0.55,
+      cx + Math.cos(t0 + 1) * rx * 0.5, cy + Math.sin(t0 + 1) * ry * 0.45
+    );
+  }
+
+  // Vacuoles
+  [[0.3, 0.2, 0.14], [-0.3, -0.2, 0.11], [0.0, 0.34, 0.09]].forEach(function(v) {
+    g.fillStyle(0x0a0000, 0.65 * a); g.fillCircle(cx + v[0]*rx, cy + v[1]*ry, v[2]*rx);
+    g.lineStyle(0.8, pal.inner, 0.5 * a); g.strokeCircle(cx + v[0]*rx, cy + v[1]*ry, v[2]*rx);
+  });
+
+  // Mitochondria — small rotated blobs
+  [[0.15, -0.3, 0], [-0.2, 0.15, 1.1], [0.3, -0.15, 2.2]].forEach(function(m) {
+    const mc = Math.cos(m[2]), ms = Math.sin(m[2]);
+    g.fillStyle(pal.nuc, 0.4 * a);
+    fillEllipse(g, cx + m[0]*rx, cy + m[1]*ry, rx*0.11, ry*0.07, mc, ms);
+    g.lineStyle(0.7, pal.nuc, 0.65 * a);
+    ellipsePath(g, cx + m[0]*rx, cy + m[1]*ry, rx*0.11, ry*0.07, mc, ms); g.strokePath();
+  });
+
+  // Nucleus with double envelope
+  g.fillStyle(0x330000, 0.85 * a); g.fillCircle(cx, cy, rx * 0.3);
+  g.fillStyle(pal.nuc, 0.5 * a);   g.fillCircle(cx, cy, rx * 0.2);
+  g.lineStyle(1.8, pal.nuc, 0.8 * a); g.strokeCircle(cx, cy, rx * 0.3);
+  // Nucleolus
+  g.fillStyle(0xff4400, 0.7 * a);
+  g.fillCircle(cx + rx * 0.08, cy - ry * 0.06, rx * 0.09);
+
+  // Outer membrane
+  g.lineStyle(2.5, pal.outer, alpha); g.strokeEllipse(cx, cy, rx * 2, ry * 2);
+  g.lineStyle(4, pal.og, 0.2 * a);   g.strokeEllipse(cx, cy, rx * 2 + 3, ry * 2 + 3);
 }
 
 // ═══════════════════════════════════════════════════════════
-//  BOOT — only food + gene pickup textures
+//  BOOT — food + gene pickup textures
 // ═══════════════════════════════════════════════════════════
 class BootScene extends Phaser.Scene {
   constructor() { super('Boot'); }
 
   create() {
-    // Physics placeholder (invisible 4×4 pixel)
+    // Physics placeholder
     const ph = this.make.graphics({ x: 0, y: 0, add: false });
     ph.fillStyle(0xffffff, 0.01); ph.fillRect(0, 0, 4, 4);
     ph.generateTexture('phys', 4, 4); ph.destroy();
 
-    // Food: glowing coccus
+    // Food: ornate coccus — layered glow + internal granule
     const fg = this.make.graphics({ x: 0, y: 0, add: false });
-    fg.lineStyle(10, COL.food, 0.12); fg.strokeCircle(14, 14, 11);
-    fg.lineStyle(5,  COL.food, 0.28); fg.strokeCircle(14, 14, 9);
-    fg.lineStyle(1.5, COL.food, 1.0); fg.strokeCircle(14, 14, 6);
-    fg.fillStyle(COL.food, 0.25);     fg.fillCircle(14, 14, 5);
-    fg.fillStyle(COL.food, 0.6);      fg.fillCircle(14, 14, 1.5);
-    fg.generateTexture('food', 28, 28); fg.destroy();
+    fg.lineStyle(12, 0xff8800, 0.1); fg.strokeCircle(16, 16, 13);
+    fg.lineStyle(6,  0xff8800, 0.22); fg.strokeCircle(16, 16, 11);
+    fg.fillStyle(0x331a00, 1.0);      fg.fillCircle(16, 16, 8);
+    fg.fillStyle(0xff8800, 0.3);      fg.fillCircle(16, 16, 7);
+    fg.fillStyle(0xff4400, 0.6);      fg.fillCircle(16, 16, 3.5);
+    fg.lineStyle(1.5, 0xff8800, 1.0); fg.strokeCircle(16, 16, 7);
+    fg.lineStyle(0.8, 0xffcc66, 0.6); fg.strokeCircle(16, 16, 8.5);
+    fg.generateTexture('food', 32, 32); fg.destroy();
 
-    // Gene pickups: glowing helix circles
+    // Gene pickups: plasmid ring style
     GENE_KEYS.forEach(key => {
       const c  = GENES[key].color;
       const gg = this.make.graphics({ x: 0, y: 0, add: false });
-      gg.lineStyle(12, c, 0.1);  gg.strokeCircle(18, 18, 16);
-      gg.lineStyle(6,  c, 0.22); gg.strokeCircle(18, 18, 13);
-      gg.lineStyle(2,  c, 1.0);  gg.strokeCircle(18, 18, 11);
+      gg.lineStyle(14, c, 0.08); gg.strokeCircle(20, 20, 17);
+      gg.lineStyle(7,  c, 0.20); gg.strokeCircle(20, 20, 14);
+      gg.lineStyle(2.0, c, 1.0); gg.strokeCircle(20, 20, 11);
+      gg.fillStyle(c, 0.12);     gg.fillCircle(20, 20, 10);
+      // Double-helix ladder rungs
       for (let i = 0; i <= 10; i++) {
-        const t = i / 10, x = 8 + t * 20;
-        const y1 = 18 + Math.sin(t * Math.PI * 2.5) * 7;
-        const y2 = 18 - Math.sin(t * Math.PI * 2.5) * 7;
-        gg.fillStyle(c, 0.9); gg.fillCircle(x, y1, 1.8); gg.fillCircle(x, y2, 1.8);
+        const t = i / 10;
+        const x = 9 + t * 22;
+        const y1 = 20 + Math.sin(t * Math.PI * 2.5) * 8;
+        const y2 = 20 - Math.sin(t * Math.PI * 2.5) * 8;
+        gg.fillStyle(c, 0.95); gg.fillCircle(x, y1, 2.0); gg.fillCircle(x, y2, 2.0);
+        if (i % 2 === 0) { gg.lineStyle(0.8, c, 0.45); gg.lineBetween(x, y1, x, y2); }
       }
-      gg.generateTexture('gene_' + key, 36, 36); gg.destroy();
+      gg.generateTexture('gene_' + key, 40, 40); gg.destroy();
     });
 
     this.scene.start('Game');
@@ -157,41 +276,35 @@ class GameScene extends Phaser.Scene {
     this.physics.world.setBounds(0, 0, WORLD_W, WORLD_H);
     this.cameras.main.setBounds(0, 0, WORLD_W, WORLD_H);
 
-    // Background
     this.bgGfx = this.add.graphics();
     this._drawBackground();
 
-    // Food + genes
     this.foodGroup = this.physics.add.staticGroup();
-    this._spawnFood(80);
+    this._spawnFood(100);
     this.geneGroup = this.physics.add.staticGroup();
     this._spawnGenes(20);
 
-    // ── Player (invisible physics body, drawn as graphics) ──
     this.player = this.physics.add.image(WORLD_W / 2, WORLD_H / 2, 'phys');
     this.player.setAlpha(0).setCollideWorldBounds(true)
                .setDamping(true).setDrag(0.90).setMaxVelocity(340).setDepth(10);
-    this.player.body.setCircle(22, -20, -20);   // 22px radius hitbox centered
+    this.player.body.setCircle(22, -20, -20);
 
-    // ── Graphics layers (drawn each frame) ──
-    this.entityGfx    = this.add.graphics().setDepth(9);   // all cell bodies
-    this.flagGfx      = this.add.graphics().setDepth(8);   // flagella
-    this.organelleGfx = this.add.graphics().setDepth(11);  // gene organelles
-    this.fxGfx        = this.add.graphics().setDepth(20);  // effects
+    this.entityGfx    = this.add.graphics().setDepth(9);
+    this.flagGfx      = this.add.graphics().setDepth(8);
+    this.organelleGfx = this.add.graphics().setDepth(11);
+    this.fxGfx        = this.add.graphics().setDepth(20);
 
-    // ── NPC bacteria ──
     this.npcCells = [];
-    this._spawnNPCs(8);
+    this._spawnNPCs(18);
 
-    // ── Predator (also invisible, drawn as graphics) ──
     this.predator = this.physics.add.image(
-      Phaser.Math.Between(500, WORLD_W - 500),
-      Phaser.Math.Between(500, WORLD_H - 500),
+      Phaser.Math.Between(600, WORLD_W - 600),
+      Phaser.Math.Between(600, WORLD_H - 600),
       'phys'
     );
     this.predator.setAlpha(0).setCollideWorldBounds(true)
                  .setDamping(true).setDrag(0.95).setMaxVelocity(150).setDepth(8);
-    this.predator.body.setCircle(55, -53, -53);
+    this.predator.body.setCircle(58, -56, -56);
 
     this.daughters = [];
 
@@ -206,34 +319,42 @@ class GameScene extends Phaser.Scene {
     this.physics.add.overlap(this.player, this.geneGroup, this._collectGene, null, this);
     this.physics.add.overlap(this.player, this.predator,  this._engulf,      null, this);
 
-    // state
-    this.energy         = 100;
-    this.activeGenes    = new Set();
-    this.alive          = true;
-    this.fissioning     = false;
-    this.engulfing      = false;
-    this.dying          = false;
-    this.dyingPulse     = false;
-    this.playerAlpha    = 1.0;
-    this.temp           = 37;
-    this.targetTemp     = 37;
-    this.tempTimer      = 0;
-    this.tempInterval   = 15000;
-    this.flagPhase      = 0;
-    this.flagSpeed      = 0;
-    this.tumbling       = false;
-    this.tumbleAngle    = 0;
-    this.tumbleTimer    = 0;
-    this.bacterioTimer  = 0;
-    this.conjTarget     = null;
-    this.conjTimer      = 0;
-    this.conjDuration   = 1800;
-    this.startTime      = this.time.now;
-    this.killCount      = 0;
-    this.touchFission   = false;
-    this.touchBact      = false;
-    this.touchConj      = false;
-    this.fissionScale   = { x: 1, y: 1 };
+    this.energy        = 100;
+    this.activeGenes   = new Set();
+    this.alive         = true;
+    this.fissioning    = false;
+    this.engulfing     = false;
+    this.dying         = false;
+    this.dyingPulse    = false;
+    this.playerAlpha   = 1.0;
+    this.temp          = 37;
+    this.targetTemp    = 37;
+    this.tempTimer     = 0;
+    this.tempInterval  = 15000;
+    this.flagPhase     = 0;
+    this.flagSpeed     = 0;
+    this.tumbling      = false;
+    this.tumbleAngle   = 0;
+    this.tumbleTimer   = 0;
+    this.bacterioTimer = 0;
+    this.conjTarget    = null;
+    this.conjTimer     = 0;
+    this.conjDuration  = 1800;
+    this.startTime     = this.time.now;
+    this.killCount     = 0;
+    this.score         = 0;
+    this.touchFission  = false;
+    this.touchBact     = false;
+    this.touchConj     = false;
+    this.fissionScale  = { x: 1, y: 1 };
+    // Ocean current — slow drift that shifts direction over time
+    this.current = {
+      angle:          Math.random() * Math.PI * 2,
+      speed:          20,
+      changeTimer:    0,
+      changeInterval: 18000,
+      targetAngle:    Math.random() * Math.PI * 2,
+    };
   }
 
   update(time, delta) {
@@ -246,7 +367,6 @@ class GameScene extends Phaser.Scene {
       this._handleMovement(delta, dt);
     }
 
-    // Draw everything
     this.entityGfx.clear();
     this.flagGfx.clear();
     this.organelleGfx.clear();
@@ -262,6 +382,24 @@ class GameScene extends Phaser.Scene {
 
     if (this.bacterioTimer > 0) this.bacterioTimer -= delta;
 
+    // Tick score (1 pt/sec + energy bonus)
+    this.score = Math.floor((this.time.now - this.startTime) / 1000) * 10
+               + this.killCount * 100
+               + Math.floor(this.energy);
+
+    // Update ocean current direction
+    this.current.changeTimer += delta;
+    if (this.current.changeTimer >= this.current.changeInterval) {
+      this.current.changeTimer = 0;
+      this.current.targetAngle = Math.random() * Math.PI * 2;
+    }
+    this.current.angle += (this.current.targetAngle - this.current.angle) * 0.0008 * delta;
+    if (!this.fissioning) {
+      const dt2 = delta / 1000;
+      this.player.body.velocity.x += Math.cos(this.current.angle) * this.current.speed * dt2;
+      this.player.body.velocity.y += Math.sin(this.current.angle) * this.current.speed * dt2;
+    }
+
     if (!this.fissioning) {
       if (this.energy > 150 && (Phaser.Input.Keyboard.JustDown(this.wasd.fiss) || this.touchFission)) {
         this.touchFission = false; this._triggerFission();
@@ -274,89 +412,87 @@ class GameScene extends Phaser.Scene {
       }
     }
 
-    if (this.foodGroup.getLength() < 25) this._spawnFood(15);
+    if (this.foodGroup.getLength() < 30) this._spawnFood(20);
   }
 
-  // ── Draw all cell bodies ────────────────────────────────────
+  // ── Draw all cell bodies ──────────────────────────────────
   _drawAllCells() {
-    const g = this.entityGfx;
-    const fg = this.flagGfx;
-    const og = this.organelleGfx;
-    const cellColor = this._getCellColor();
+    const g = this.entityGfx, fg = this.flagGfx, og = this.organelleGfx;
+    const pal = this._getPlayerPalette();
     const pa = this.playerAlpha;
 
-    // Player rod
+    const rx = 14 * CELL_S * this.fissionScale.x;
+    const ry = 52 * CELL_S * this.fissionScale.y;
     const angle = this.player.rotation;
-    drawBacteria(g,
-      this.player.x, this.player.y,
-      angle,
-      10 * CELL_S * this.fissionScale.x,
-      38 * CELL_S * this.fissionScale.y,
-      cellColor, pa
-    );
-    this._drawOrganelles(og, this.player.x, this.player.y, angle, cellColor, pa, CELL_S);
 
-    // Flagellum
-    const backAngle = angle + Math.PI;
+    drawBacteria(g, this.player.x, this.player.y, angle, rx, ry, pal, pa);
+    this._drawOrganelles(og, this.player.x, this.player.y, angle, pal.outer, pa, CELL_S);
+
     this.flagPhase += 0.12 + this.flagSpeed * 0.18;
-    const pRear = 42 * CELL_S;
-    this._drawFlagellum(fg, this.player.x, this.player.y, angle, this.flagPhase, cellColor, pa, pRear);
+    const pRear = 55 * CELL_S;
+    this._drawFlagellum(fg, this.player.x, this.player.y, angle, this.flagPhase, pal, pa, pRear);
     if (this.activeGenes.has('FLAGELLUM')) {
-      this._drawFlagellum(fg, this.player.x, this.player.y, angle + 0.35, this.flagPhase + Math.PI, cellColor, pa, pRear);
+      this._drawFlagellum(fg, this.player.x, this.player.y, angle + 0.35, this.flagPhase + Math.PI, pal, pa, pRear);
     }
 
-    // Predator
-    drawPredator(g, this.predator.x, this.predator.y, 48 * CELL_S, 38 * CELL_S, 1.0);
+    drawPredator(g, this.predator.x, this.predator.y, 58 * CELL_S, 46 * CELL_S, 1.0, this.flagPhase);
 
-    // Daughters
     this.daughters.forEach(d => {
       if (!d.active) return;
       const da = Phaser.Math.DegToRad(d.angle - 90);
-      drawBacteria(g, d.x, d.y, da, 8 * CELL_S, 30 * CELL_S, COL.daughter, 1.0);
-      this._drawFlagellum(fg, d.x, d.y, da, d.flagPhase, COL.daughter, 1.0, 34 * CELL_S);
+      drawBacteria(g, d.x, d.y, da, 10 * CELL_S, 38 * CELL_S, PAL.daughter, 1.0);
+      this._drawFlagellum(fg, d.x, d.y, da, d.flagPhase, PAL.daughter, 1.0, 42 * CELL_S);
     });
 
-    // NPCs
     this.npcCells.forEach(npc => {
       if (!npc.active) return;
       const na = Phaser.Math.DegToRad(npc.angle - 90);
-      drawBacteria(g, npc.x, npc.y, na, 8 * CELL_S, 30 * CELL_S, COL.npc, 1.0);
-      this._drawFlagellum(fg, npc.x, npc.y, na, npc.flagPhase, COL.npc, 1.0, 34 * CELL_S);
+      drawBacteria(g, npc.x, npc.y, na, 10 * CELL_S, 38 * CELL_S, npc.palette, 1.0);
+      this._drawFlagellum(fg, npc.x, npc.y, na, npc.flagPhase, npc.palette, 1.0, 42 * CELL_S);
     });
   }
 
-  // ── Flagellum ──────────────────────────────────────────────
-  _drawFlagellum(fg, px, py, baseAngle, phase, color, alpha, rearDist) {
-    const len   = 55, segs = 22;
-    const amp   = 5 + this.flagSpeed * 4;
-    const perpX = Math.cos(baseAngle + Math.PI / 2);
-    const perpY = Math.sin(baseAngle + Math.PI / 2);
-    const backX = Math.cos(baseAngle + Math.PI);
-    const backY = Math.sin(baseAngle + Math.PI);
-    const sx = px + backX * rearDist, sy = py + backY * rearDist;
+  // ── Multi-strand flagellum ────────────────────────────────
+  _drawFlagellum(fg, px, py, baseAngle, phase, pal, alpha, rearDist) {
+    const len = 65, segs = 20;
+    const amp = 4.5 + this.flagSpeed * 3.5;
+    const strands = DETAIL ? [-0.12, 0, 0.12] : [0];
 
-    for (const [lw, la] of [[6, 0.08], [1.5, 0.88]]) {
-      fg.lineStyle(lw, color, la * alpha);
+    strands.forEach((off, oi) => {
+      const ba   = baseAngle + off;
+      const perpX = Math.cos(ba + Math.PI / 2), perpY = Math.sin(ba + Math.PI / 2);
+      const backX = Math.cos(ba + Math.PI),     backY = Math.sin(ba + Math.PI);
+      const sx = px + backX * rearDist, sy = py + backY * rearDist;
+
+      fg.lineStyle(3, pal.outer, 0.07 * alpha);
       fg.beginPath(); fg.moveTo(sx, sy);
       for (let i = 1; i <= segs; i++) {
         const t  = i / segs;
-        const cx2 = sx + backX * len * t;
-        const cy2 = sy + backY * len * t;
-        const w   = Math.sin(phase + t * Math.PI * 3) * amp * (1 - t * 0.4);
-        fg.lineTo(cx2 + perpX * w, cy2 + perpY * w);
+        const fx = sx + backX * len * t, fy = sy + backY * len * t;
+        const w  = Math.sin(phase + oi * 1.3 + t * Math.PI * 2.8) * amp * (1 - t * 0.45);
+        fg.lineTo(fx + perpX * w, fy + perpY * w);
       }
       fg.strokePath();
-    }
+
+      fg.lineStyle(0.9, pal.outer, 0.75 * alpha);
+      fg.beginPath(); fg.moveTo(sx, sy);
+      for (let i = 1; i <= segs; i++) {
+        const t  = i / segs;
+        const fx = sx + backX * len * t, fy = sy + backY * len * t;
+        const w  = Math.sin(phase + oi * 1.3 + t * Math.PI * 2.8) * amp * (1 - t * 0.45);
+        fg.lineTo(fx + perpX * w, fy + perpY * w);
+      }
+      fg.strokePath();
+    });
   }
 
-  // ── Gene organelle overlays ────────────────────────────────
-  _drawOrganelles(og, px, py, angle, color, alpha, scale) {
-    scale = scale || 1;
+  // ── Gene organelle overlays ───────────────────────────────
+  _drawOrganelles(og, px, py, angle, outerColor, alpha, scale) {
     if (this.activeGenes.size === 0) return;
     const cos = Math.cos(angle), sin = Math.sin(angle);
     const rot = (x, y) => ({ x: px + x*cos - y*sin, y: py + x*sin + y*cos });
+    const s = (scale || 1) * 0.55;
 
-    const s = (scale || 1) * 0.55;  // match reduced cell size
     if (this.activeGenes.has('HSP')) {
       og.fillStyle(GENES.HSP.color, 0.72 * alpha);
       [[-4,-44],[4,-44],[-4,44],[4,44],[0,-28],[0,28]].forEach(([x, y]) => {
@@ -375,12 +511,12 @@ class GameScene extends Phaser.Scene {
       og.lineBetween(a2.x, a2.y, b2.x, b2.y);
     }
     if (this.activeGenes.has('MEMBRANE')) {
-      og.lineStyle(2.5, GENES.MEMBRANE.color, 0.25 * alpha);
+      og.lineStyle(2.5, GENES.MEMBRANE.color, 0.22 * alpha);
       const segs = 24;
       for (let i = 0; i < segs; i++) {
-        const a1 = (i / segs) * Math.PI * 2, a2 = ((i+1) / segs) * Math.PI * 2;
-        const p1 = rot(Math.cos(a1)*22*s, Math.sin(a1)*86*s);
-        const p2 = rot(Math.cos(a2)*22*s, Math.sin(a2)*86*s);
+        const a1 = (i/segs)*Math.PI*2, a2 = ((i+1)/segs)*Math.PI*2;
+        const p1 = rot(Math.cos(a1)*26*s, Math.sin(a1)*100*s);
+        const p2 = rot(Math.cos(a2)*26*s, Math.sin(a2)*100*s);
         og.lineBetween(p1.x, p1.y, p2.x, p2.y);
       }
     }
@@ -392,22 +528,25 @@ class GameScene extends Phaser.Scene {
     }
   }
 
-  // ── Cell colour ────────────────────────────────────────────
-  _getCellColor() {
-    if (this.activeGenes.size === 0) return COL.cell;
-    let r = (COL.cell >> 16) & 0xff;
-    let g = (COL.cell >> 8)  & 0xff;
-    let b =  COL.cell & 0xff;
+  // ── Player palette — shifts toward active gene colours ────
+  _getPlayerPalette() {
+    if (this.activeGenes.size === 0) return PAL.player;
+    let r = (PAL.player.outer >> 16) & 0xff;
+    let gr = (PAL.player.outer >> 8) & 0xff;
+    let b = PAL.player.outer & 0xff;
     this.activeGenes.forEach(key => {
       const c = GENES[key].color;
-      r = Math.min(255, r + (((c >> 16) & 0xff) * 0.55)) | 0;
-      g = Math.min(255, g + (((c >> 8)  & 0xff) * 0.55)) | 0;
-      b = Math.min(255, b + ((c & 0xff)          * 0.55)) | 0;
+      r  = Math.min(255, r  + (((c >> 16) & 0xff) * 0.28)) | 0;
+      gr = Math.min(255, gr + (((c >> 8)  & 0xff) * 0.28)) | 0;
+      b  = Math.min(255, b  + ((c & 0xff)          * 0.28)) | 0;
     });
-    return (r << 16) | (g << 8) | b;
+    const blended = (r << 16) | (gr << 8) | b;
+    return Object.assign({}, PAL.player, { outer: blended });
   }
 
-  // ── Temperature ────────────────────────────────────────────
+  _getPlayerOuterColor() { return this._getPlayerPalette().outer; }
+
+  // ── Temperature ───────────────────────────────────────────
   _updateTemp(dt) {
     this.tempTimer += dt * 1000;
     if (this.tempTimer >= this.tempInterval) {
@@ -419,20 +558,18 @@ class GameScene extends Phaser.Scene {
     this.temp += (this.targetTemp - this.temp) * dt * 0.3;
   }
 
-  // ── Energy ─────────────────────────────────────────────────
+  // ── Energy ────────────────────────────────────────────────
   _updateEnergy(dt) {
     let drain = 1.0;
     if (this.activeGenes.has('FLAGELLUM')) drain += 0.1;
     const speed = Math.hypot(this.player.body.velocity.x, this.player.body.velocity.y);
     drain += speed * 0.003;
-    const isHot  = this.temp > 42, isCold = this.temp < 30;
+    const isHot = this.temp > 42, isCold = this.temp < 30;
     if (isHot || isCold) drain *= (isHot ? this.activeGenes.has('HSP') : this.activeGenes.has('CSP')) ? 2 : 4;
     this.energy -= drain * dt;
 
-    // low energy — pulse alpha
     if (this.energy < 30 && !this.dyingPulse) {
-      this.dyingPulse = true;
-      this._pulseLow();
+      this.dyingPulse = true; this._pulseLow();
     }
     if (this.energy <= 0) { this.energy = 0; this._implode(); }
   }
@@ -443,7 +580,7 @@ class GameScene extends Phaser.Scene {
     this.time.delayedCall(220, () => this._pulseLow());
   }
 
-  // ── Movement ───────────────────────────────────────────────
+  // ── Movement ──────────────────────────────────────────────
   _handleMovement(delta, dt) {
     let baseSpeed = 280;
     if (this.activeGenes.has('FLAGELLUM')) baseSpeed *= 1.4;
@@ -492,7 +629,7 @@ class GameScene extends Phaser.Scene {
     }
   }
 
-  // ── Food + Gene ─────────────────────────────────────────────
+  // ── Food + Gene ───────────────────────────────────────────
   _eatFood(player, food) {
     food.destroy();
     this.energy = Math.min(200, this.energy + 22);
@@ -515,7 +652,7 @@ class GameScene extends Phaser.Scene {
     this.cameras.main.flash(180, (gc >> 16) & 0xff, (gc >> 8) & 0xff, gc & 0xff, true);
   }
 
-  // ── NPC bacteria ───────────────────────────────────────────
+  // ── NPC bacteria ──────────────────────────────────────────
   _spawnNPCs(n) {
     for (let i = 0; i < n; i++) {
       const x = Phaser.Math.Between(300, WORLD_W - 300);
@@ -525,13 +662,14 @@ class GameScene extends Phaser.Scene {
       npc.body.setCircle(16, -14, -14);
       npc.hp         = 2;
       npc.genes      = new Set();
+      npc.palette    = NPC_PALS[i % 4];
       const shuffled = Phaser.Utils.Array.Shuffle([...GENE_KEYS]);
       npc.genes.add(shuffled[0]);
       if (Math.random() < 0.5) npc.genes.add(shuffled[1]);
-      npc.wanderDir   = Math.random() * Math.PI * 2;
+      npc.wanderDir  = Math.random() * Math.PI * 2;
       npc.wanderTimer = 0;
-      npc.flagPhase   = Math.random() * Math.PI * 2;
-      npc.angle       = 0;
+      npc.flagPhase  = Math.random() * Math.PI * 2;
+      npc.angle      = 0;
       this.npcCells.push(npc);
       this.physics.add.overlap(this.player, npc, () => this._collideNPC(npc), null, this);
     }
@@ -568,32 +706,31 @@ class GameScene extends Phaser.Scene {
         const gy = cy + Phaser.Math.Between(-28, 28);
         const g  = this.geneGroup.create(gx, gy, 'gene_' + key).setDepth(6).setTint(GENES[key].color);
         g.setData('geneKey', key);
-        this.tweens.add({ targets: g, y: gy - 6, duration: 1400 + Math.random() * 400, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+        this.tweens.add({ targets: g, y: gy - 6, duration: 1400 + Math.random()*400, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
       });
     }
     this.killCount++;
-    // death flash
     const flash = this.add.graphics().setDepth(22);
     flash.lineStyle(3, 0xffffff, 0.8); flash.strokeCircle(cx, cy, 22);
     this.tweens.add({ targets: flash, alpha: 0, scaleX: 2.5, scaleY: 2.5, duration: 350, onComplete: () => flash.destroy() });
     cell.destroy();
   }
 
-  // ── Bacteriocin ────────────────────────────────────────────
+  // ── Bacteriocin ───────────────────────────────────────────
   _fireBacteriocin() {
     if (this.bacterioTimer > 0 || this.energy < 30) return;
     this.energy -= 30; this.bacterioTimer = 5000;
     const range = this.activeGenes.has('TOXIN') ? 210 : 140;
     const px = this.player.x, py = this.player.y;
     const ring = this.add.graphics().setDepth(18);
-    ring.lineStyle(3, COL.bacterio, 1.0); ring.strokeCircle(px, py, 10);
+    ring.lineStyle(3, 0xff44aa, 1.0); ring.strokeCircle(px, py, 10);
     this.tweens.add({ targets: ring, scaleX: range/10, scaleY: range/10, alpha: 0, duration: 440, ease: 'Power2', onComplete: () => ring.destroy() });
     [...this.npcCells, ...this.daughters].forEach(c => {
       if (c.active && Phaser.Math.Distance.Between(px, py, c.x, c.y) < range) this._killCell(c);
     });
   }
 
-  // ── Conjugation ────────────────────────────────────────────
+  // ── Conjugation ───────────────────────────────────────────
   _startConjugation() {
     if (this.conjTarget) return;
     let nearest = null, nearDist = 140;
@@ -612,7 +749,7 @@ class GameScene extends Phaser.Scene {
     const t = this.conjTimer / this.conjDuration;
 
     this.fxGfx.clear();
-    this.fxGfx.lineStyle(2, COL.pilus, 0.4 + Math.sin(t * Math.PI * 6) * 0.4);
+    this.fxGfx.lineStyle(2, 0xffff55, 0.4 + Math.sin(t * Math.PI * 6) * 0.4);
     this.fxGfx.lineBetween(this.player.x, this.player.y, this.conjTarget.x, this.conjTarget.y);
 
     if (this.conjTimer >= this.conjDuration) {
@@ -631,7 +768,7 @@ class GameScene extends Phaser.Scene {
     }
   }
 
-  // ── Predator AI ────────────────────────────────────────────
+  // ── Predator AI ───────────────────────────────────────────
   _updatePredator(delta) {
     const dist = Phaser.Math.Distance.Between(this.player.x, this.player.y, this.predator.x, this.predator.y);
     if (dist < 300) {
@@ -644,23 +781,22 @@ class GameScene extends Phaser.Scene {
       }
       this.predator.wanderTimer -= delta;
     }
-    // pseudopods drawn inline when chasing
     if (dist < 200) this._drawPseudopods();
   }
 
   _drawPseudopods() {
     const g = this.entityGfx;
     for (let i = 0; i < 3; i++) {
-      const ba = Math.atan2(this.player.y - this.predator.y, this.player.x - this.predator.x) + (i-1)*0.4;
-      const len   = 48 + Math.sin(this.flagPhase*2 + i)*12;
+      const ba  = Math.atan2(this.player.y - this.predator.y, this.player.x - this.predator.x) + (i-1)*0.4;
+      const len = 52 + Math.sin(this.flagPhase*2 + i)*14;
       const perpX = Math.cos(ba + Math.PI/2), perpY = Math.sin(ba + Math.PI/2);
-      g.lineStyle(2.5, COL.predator, 0.6);
+      g.lineStyle(2.5, PAL.predator.outer, 0.6);
       g.beginPath();
-      g.moveTo(this.predator.x + Math.cos(ba)*55, this.predator.y + Math.sin(ba)*45);
+      g.moveTo(this.predator.x + Math.cos(ba)*60, this.predator.y + Math.sin(ba)*48);
       for (let s = 1; s <= 14; s++) {
-        const t  = s / 14;
-        const cx2 = this.predator.x + Math.cos(ba)*(55 + len*t);
-        const cy2 = this.predator.y + Math.sin(ba)*(45 + len*t);
+        const t   = s / 14;
+        const cx2 = this.predator.x + Math.cos(ba)*(60 + len*t);
+        const cy2 = this.predator.y + Math.sin(ba)*(48 + len*t);
         const w   = Math.sin(this.flagPhase*1.5 + i*2 + t*Math.PI*2) * 4;
         g.lineTo(cx2 + perpX*w, cy2 + perpY*w);
       }
@@ -668,7 +804,7 @@ class GameScene extends Phaser.Scene {
     }
   }
 
-  // ── Engulf → lysis ─────────────────────────────────────────
+  // ── Engulf / lysis / implosion / fission ──────────────────
   _engulf() {
     if (this.engulfing || this.fissioning || this.dying) return;
     this.engulfing = true;
@@ -682,19 +818,18 @@ class GameScene extends Phaser.Scene {
     doPulse();
   }
 
-  // ── Lysis death ────────────────────────────────────────────
   _lyse(reason) {
     if (!this.alive || this.dying) return;
     this.alive = false; this.dying = true;
     this.player.body.setVelocity(0, 0).setAcceleration(0, 0);
     const px = this.player.x, py = this.player.y;
-    const color = this._getCellColor();
+    const color = this._getPlayerOuterColor();
     this.playerAlpha = 0;
 
     for (let i = 0; i < 12; i++) {
-      const a = (i / 12) * Math.PI * 2;
+      const a    = (i / 12) * Math.PI * 2;
       const frag = this.add.graphics().setDepth(22).setPosition(px, py);
-      const fa = a + (Math.random() - 0.5) * 0.5;
+      const fa   = a + (Math.random() - 0.5) * 0.5;
       frag.lineStyle(2, color, 0.9);
       frag.beginPath(); frag.arc(0, 0, 14 + Math.random()*10, fa, fa + 0.7, false); frag.strokePath();
       frag.fillStyle(color, 0.55); frag.fillCircle(Math.cos(fa)*8, Math.sin(fa)*8, 2);
@@ -704,16 +839,15 @@ class GameScene extends Phaser.Scene {
     this.time.delayedCall(800, () => this._showGameOver(reason));
   }
 
-  // ── Implosion death ────────────────────────────────────────
   _implode() {
     if (!this.alive || this.dying) return;
     this.alive = false; this.dying = true;
     this.player.body.setVelocity(0, 0).setAcceleration(0, 0);
     const px = this.player.x, py = this.player.y;
-    const color = this._getCellColor();
+    const color = this._getPlayerOuterColor();
 
     this.fissionScale = { x: 1, y: 1 };
-    const shrinkInterval = this.time.addEvent({
+    this.time.addEvent({
       delay: 40, repeat: 14,
       callback: () => {
         this.fissionScale.x = Math.max(0, this.fissionScale.x - 0.07);
@@ -731,7 +865,6 @@ class GameScene extends Phaser.Scene {
     this.time.delayedCall(740, () => this._showGameOver('ENERGY DEPLETED'));
   }
 
-  // ── Fission ────────────────────────────────────────────────
   _triggerFission() {
     if (this.fissioning) return;
     this.fissioning = true;
@@ -772,7 +905,7 @@ class GameScene extends Phaser.Scene {
     this._updateGeneHUD();
   }
 
-  // ── Daughters ──────────────────────────────────────────────
+  // ── Daughters ─────────────────────────────────────────────
   _updateDaughters(delta) {
     for (let i = this.daughters.length - 1; i >= 0; i--) {
       const d = this.daughters[i];
@@ -788,7 +921,7 @@ class GameScene extends Phaser.Scene {
     }
   }
 
-  // ── Env tint ───────────────────────────────────────────────
+  // ── Env tint ──────────────────────────────────────────────
   _updateEnvTint() {
     const t = this.temp;
     if (t > 42) {
@@ -798,41 +931,41 @@ class GameScene extends Phaser.Scene {
       const i = Math.min((30-t)/20, 1) * 0.22;
       this.cameras.main.setBackgroundColor(Phaser.Display.Color.GetColor(0, 0, Math.floor(8+i*90)));
     } else {
-      this.cameras.main.setBackgroundColor(0x000008);
+      this.cameras.main.setBackgroundColor(0x07071a);
     }
   }
 
-  // ── HUD ────────────────────────────────────────────────────
+  // ── HUD ───────────────────────────────────────────────────
   _createHUD() {
     const w = this.cameras.main.width, h = this.cameras.main.height;
     this.hudCon = this.add.container(0, 0).setScrollFactor(0).setDepth(100);
 
-    // Energy: thin bar, top of screen full-width (subtle)
     this.energyBarBg = this.add.graphics();
-    this.energyBarBg.fillStyle(0x112211, 0.5); this.energyBarBg.fillRect(0, 0, w, 6);
+    this.energyBarBg.fillStyle(0x111122, 0.5); this.energyBarBg.fillRect(0, 0, w, 6);
     this.hudCon.add(this.energyBarBg);
 
     this.energyBar = this.add.graphics();
     this.hudCon.add(this.energyBar);
 
-    // Temp: small colored text, top right
     this.tempText = this.add.text(w - 10, 10, '37°C', {
-      fontSize: '12px', fill: '#33aa33', fontFamily: 'monospace'
+      fontSize: '12px', fill: '#33cc66', fontFamily: 'monospace'
     }).setOrigin(1, 0);
     this.hudCon.add(this.tempText);
 
-    // Time + kills: top left, small
-    this.scoreText = this.add.text(10, 10, '0s', {
-      fontSize: '12px', fill: '#33aa33', fontFamily: 'monospace'
+    this.scoreText = this.add.text(10, 10, '0', {
+      fontSize: '14px', fill: '#ffd060', fontFamily: 'monospace', fontStyle: 'bold'
     });
     this.hudCon.add(this.scoreText);
 
-    // Gene slots: bottom center
+    // Current arrow — compass indicator bottom-left above action buttons
+    this.currentArrowGfx = this.add.graphics().setScrollFactor(0).setDepth(101);
+    this.hudCon.add(this.currentArrowGfx);
+
     this.geneSlots = [];
     for (let i = 0; i < 3; i++) {
       const sx = w/2 - 44 + i * 44, sy = h - 38;
       const bg = this.add.graphics();
-      bg.lineStyle(1, 0x224422, 0.7); bg.strokeRect(sx-16, sy-16, 32, 32);
+      bg.lineStyle(1, 0x224433, 0.7); bg.strokeRect(sx-16, sy-16, 32, 32);
       this.hudCon.add(bg);
       const lbl = this.add.text(sx, sy, '', {
         fontSize: '14px', fill: '#aaffaa', fontFamily: 'monospace'
@@ -841,19 +974,16 @@ class GameScene extends Phaser.Scene {
       this.geneSlots.push({ bg, lbl, sx, sy });
     }
 
-    // Fission ready: subtle, centre bottom
-    this.fissText = this.add.text(w/2, h - 72, 'F: FISSION READY', {
-      fontSize: '9px', fill: '#00ff66', fontFamily: 'monospace'
+    this.fissText = this.add.text(w/2, h - 72, 'F  DIVIDE', {
+      fontSize: '13px', fill: '#ffd060', fontFamily: 'monospace', fontStyle: 'bold'
     }).setOrigin(0.5).setAlpha(0);
     this.hudCon.add(this.fissText);
 
-    // Bact cooldown: bottom left
     this.bactText = this.add.text(10, h - 18, '', {
       fontSize: '9px', fill: '#ff88aa', fontFamily: 'monospace'
     });
     this.hudCon.add(this.bactText);
 
-    // Conjugate hint: bottom right
     this.conjHint = this.add.text(w - 10, h - 18, '', {
       fontSize: '9px', fill: '#ffff88', fontFamily: 'monospace', align: 'right'
     }).setOrigin(1, 0);
@@ -863,9 +993,8 @@ class GameScene extends Phaser.Scene {
   }
 
   _buildActionButtons(w, h) {
-    // Drawn circles with letter labels — no emoji
     const btns = [
-      { label: 'F', y: h-150, key: 'touchFission', color: 0x00ff66 },
+      { label: 'F', y: h-150, key: 'touchFission', color: 0xffd060 },
       { label: 'B', y: h-100, key: 'touchBact',    color: 0xff88aa },
       { label: 'C', y: h-50,  key: 'touchConj',    color: 0xffff88 },
     ];
@@ -874,7 +1003,6 @@ class GameScene extends Phaser.Scene {
       const btn = this.add.text(w - 28, b.y, b.label, {
         fontSize: '13px', fill: hexStr, fontFamily: 'monospace'
       }).setScrollFactor(0).setDepth(200).setOrigin(0.5).setAlpha(0.3).setInteractive({ useHandCursor: false });
-      // draw a circle around it
       const circ = this.add.graphics().setScrollFactor(0).setDepth(199);
       circ.lineStyle(1, b.color, 0.3); circ.strokeCircle(w - 28, b.y, 16);
       this.hudCon.add(circ);
@@ -884,10 +1012,8 @@ class GameScene extends Phaser.Scene {
       this.hudCon.add(btn);
     });
 
-    // Tumble: left side
-    const tumbleColor = 0xaabbcc;
     const tcirc = this.add.graphics().setScrollFactor(0).setDepth(199);
-    tcirc.lineStyle(1, tumbleColor, 0.3); tcirc.strokeCircle(28, h-130, 16);
+    tcirc.lineStyle(1, 0xaabbcc, 0.3); tcirc.strokeCircle(28, h-130, 16);
     this.hudCon.add(tcirc);
 
     const tumbleBtn = this.add.text(28, h-130, 'T', {
@@ -907,27 +1033,57 @@ class GameScene extends Phaser.Scene {
   }
 
   _updateHUD(time) {
-    const w = this.cameras.main.width;
+    const w = this.cameras.main.width, h = this.cameras.main.height;
     const pct   = Math.min(this.energy / 200, 1);
-    const color = this.energy > 150 ? 0x00ff66 : this.energy > 50 ? 0x00cc44 : 0xff4444;
+    const color = this.energy > 150 ? 0xffd060 : this.energy > 50 ? 0xff8800 : 0xff4444;
     this.energyBar.clear();
-    this.energyBar.fillStyle(color, 0.8);
+    this.energyBar.fillStyle(color, 0.85);
     this.energyBar.fillRect(0, 0, Math.floor(w * pct), 6);
 
-    const tc = this.temp > 50 ? '#ff5522' : this.temp < 25 ? '#55aaff' : '#33aa33';
+    const tc = this.temp > 50 ? '#ff5522' : this.temp < 25 ? '#55aaff' : '#33cc66';
     this.tempText.setText(`${Math.round(this.temp)}°C`).setStyle({ fill: tc });
 
     const sec = Math.floor((time - this.startTime) / 1000);
-    this.scoreText.setText(`${sec}s  ${this.killCount > 0 ? this.killCount + ' kills' : ''}`);
+    this.scoreText.setText(`${this.score}  ${this.killCount > 0 ? this.killCount + '✕' : ''}`);
 
-    this.fissText.setAlpha(this.energy > 150 ? 0.8 : 0);
+    // Fission ready — pulse when available
+    if (this.energy > 150) {
+      this.fissText.setAlpha(0.6 + Math.sin(time * 0.006) * 0.4);
+    } else {
+      this.fissText.setAlpha(0);
+    }
+
     this.bactText.setText(this.bacterioTimer > 0 ? `B ${Math.ceil(this.bacterioTimer/1000)}s` : 'B ready');
 
     const allFriendly = [...this.daughters, ...this.npcCells];
     const near = allFriendly.some(c => c.active && Phaser.Math.Distance.Between(this.player.x, this.player.y, c.x, c.y) < 140);
     this.conjHint.setText(this.conjTarget ? 'conjugating...' : near ? 'C conjugate' : '');
 
+    // Current direction arrow — small compass bottom-left
+    this._drawCurrentArrow(h);
+
     this._updateGeneHUD();
+  }
+
+  _drawCurrentArrow(h) {
+    const g = this.currentArrowGfx;
+    g.clear();
+    const cx = 28, cy = h - 185;
+    const a  = this.current.angle;
+    const r  = 14;
+    // Background ring
+    g.lineStyle(1, 0x334455, 0.5);
+    g.strokeCircle(cx, cy, r);
+    // Arrow
+    g.lineStyle(1.5, 0x88bbdd, 0.7);
+    g.lineBetween(cx - Math.cos(a)*r*0.6, cy - Math.sin(a)*r*0.6, cx + Math.cos(a)*r*0.85, cy + Math.sin(a)*r*0.85);
+    const aw = 0.45;
+    g.fillStyle(0x88bbdd, 0.7);
+    g.fillTriangle(
+      cx + Math.cos(a)*r, cy + Math.sin(a)*r,
+      cx + Math.cos(a + Math.PI - aw)*r*0.45, cy + Math.sin(a + Math.PI - aw)*r*0.45,
+      cx + Math.cos(a + Math.PI + aw)*r*0.45, cy + Math.sin(a + Math.PI + aw)*r*0.45
+    );
   }
 
   _updateGeneHUD() {
@@ -936,7 +1092,7 @@ class GameScene extends Phaser.Scene {
       const key = gArr[i];
       slot.lbl.setText(key ? GENES[key].symbol : '');
       slot.bg.clear();
-      const col = key ? GENES[key].color : 0x224422;
+      const col = key ? GENES[key].color : 0x224433;
       slot.bg.lineStyle(1, col, key ? 0.85 : 0.25);
       slot.bg.strokeRect(slot.sx - 16, slot.sy - 16, 32, 32);
       if (key) { slot.bg.fillStyle(col, 0.1); slot.bg.fillRect(slot.sx-16, slot.sy-16, 32, 32); }
@@ -945,43 +1101,72 @@ class GameScene extends Phaser.Scene {
     });
   }
 
-  // ── Touch + Joystick ───────────────────────────────────────
+  // ── Touch — swipe-to-row ──────────────────────────────────
+  // Each swipe on the left ~2/3 of screen propels the cell in
+  // the swipe direction (rowing). Repeated short strokes = swimming.
   _setupTouch() {
-    this.joystick = { active: false, baseX: 0, baseY: 0, stickX: 0, stickY: 0, radius: 65, dx: 0, dy: 0 };
-    this.joystickGfx = this.add.graphics().setScrollFactor(0).setDepth(150);
+    this.swipe = { active: false, startX: 0, startY: 0, curX: 0, curY: 0 };
+    this.swipeGfx = this.add.graphics().setScrollFactor(0).setDepth(150);
+    // Keep joystick stub so _handleMovement reference doesn't break
+    this.joystick = { active: false, dx: 0, dy: 0 };
     const RZ = this.cameras.main.width - 80;
 
     this.input.on('pointerdown', (p) => {
-      if (p.x < RZ && !this.joystick.active) {
-        this.joystick.active = true;
-        this.joystick.baseX = p.x; this.joystick.baseY = p.y;
-        this.joystick.stickX = p.x; this.joystick.stickY = p.y;
-        this.joystick.dx = 0; this.joystick.dy = 0;
+      if (p.x < RZ) {
+        this.swipe.active = true;
+        this.swipe.startX = p.x; this.swipe.startY = p.y;
+        this.swipe.curX   = p.x; this.swipe.curY   = p.y;
       }
     });
     this.input.on('pointermove', (p) => {
-      if (!this.joystick.active) return;
-      const dx = p.x - this.joystick.baseX, dy = p.y - this.joystick.baseY;
-      const dist = Math.sqrt(dx*dx + dy*dy), a = Math.atan2(dy, dx);
-      const cl = Math.min(dist, this.joystick.radius);
-      this.joystick.stickX = this.joystick.baseX + Math.cos(a)*cl;
-      this.joystick.stickY = this.joystick.baseY + Math.sin(a)*cl;
-      this.joystick.dx = dist > 8 ? Math.cos(a) : 0;
-      this.joystick.dy = dist > 8 ? Math.sin(a) : 0;
+      if (!this.swipe.active) return;
+      this.swipe.curX = p.x; this.swipe.curY = p.y;
     });
-    this.input.on('pointerup', () => {
-      this.joystick.active = false; this.joystick.dx = 0; this.joystick.dy = 0;
+    this.input.on('pointerup', (p) => {
+      if (!this.swipe.active) return;
+      this.swipe.active = false;
+      const dx   = p.x - this.swipe.startX;
+      const dy   = p.y - this.swipe.startY;
+      const dist = Math.hypot(dx, dy);
+      if (dist > 14 && this.alive && !this.dying && !this.fissioning) {
+        const nx = dx / dist, ny = dy / dist;
+        let baseSpeed = 280;
+        if (this.activeGenes.has('FLAGELLUM')) baseSpeed *= 1.4;
+        if (this.activeGenes.has('MEMBRANE'))  baseSpeed *= 0.85;
+        const power = Math.min(dist, 100) / 100;
+        this.player.body.velocity.x += nx * baseSpeed * 1.8 * power;
+        this.player.body.velocity.y += ny * baseSpeed * 1.8 * power;
+        // Rotate cell to face swipe direction
+        this.player.rotation = Math.atan2(ny, nx) + Math.PI / 2;
+        this.flagSpeed = power;
+      }
     });
   }
 
   _drawJoystick() {
-    this.joystickGfx.clear();
-    if (!this.joystick.active) return;
-    const { baseX, baseY, stickX, stickY, radius } = this.joystick;
-    this.joystickGfx.lineStyle(1.5, 0xffffff, 0.14); this.joystickGfx.strokeCircle(baseX, baseY, radius);
-    this.joystickGfx.lineStyle(1,   0xffffff, 0.08); this.joystickGfx.strokeCircle(baseX, baseY, radius*0.5);
-    this.joystickGfx.fillStyle(COL.cell, 0.25);       this.joystickGfx.fillCircle(stickX, stickY, 20);
-    this.joystickGfx.lineStyle(1.5, COL.cell, 0.45);  this.joystickGfx.strokeCircle(stickX, stickY, 20);
+    this.swipeGfx.clear();
+    if (!this.swipe.active) return;
+    const { startX, startY, curX, curY } = this.swipe;
+    const dx = curX - startX, dy = curY - startY;
+    const dist = Math.hypot(dx, dy);
+    // Anchor ring
+    this.swipeGfx.lineStyle(1.5, 0xffffff, 0.12);
+    this.swipeGfx.strokeCircle(startX, startY, 28);
+    // Drag line
+    if (dist > 6) {
+      this.swipeGfx.lineStyle(2, PAL.player.outer, 0.5);
+      this.swipeGfx.lineBetween(startX, startY, curX, curY);
+      // Arrow head
+      const a = Math.atan2(dy, dx);
+      const tip = { x: curX, y: curY };
+      const aw = 0.4;
+      this.swipeGfx.fillStyle(PAL.player.outer, 0.6);
+      this.swipeGfx.fillTriangle(
+        tip.x, tip.y,
+        tip.x - Math.cos(a - aw) * 12, tip.y - Math.sin(a - aw) * 12,
+        tip.x - Math.cos(a + aw) * 12, tip.y - Math.sin(a + aw) * 12
+      );
+    }
   }
 
   _setupKeyboard() {
@@ -994,33 +1179,56 @@ class GameScene extends Phaser.Scene {
     });
   }
 
-  // ── Background ─────────────────────────────────────────────
+  // ── Rich background ───────────────────────────────────────
   _drawBackground() {
-    // Very sparse faint dots — like looking through microscope at slide
-    this.bgGfx.fillStyle(0x004422, 0.5);
-    for (let i = 0; i < 800; i++) {
-      const x = Phaser.Math.Between(0, WORLD_W);
-      const y = Phaser.Math.Between(0, WORLD_H);
-      const r = Math.random();
-      if (r < 0.7) {
-        this.bgGfx.fillCircle(x, y, 1);
-      } else if (r < 0.9) {
-        this.bgGfx.fillStyle(0x002211, 0.4); this.bgGfx.fillCircle(x, y, 2);
-      } else {
-        this.bgGfx.fillStyle(0x006644, 0.2); this.bgGfx.fillCircle(x, y, 3);
-      }
+    const g = this.bgGfx;
+
+    // Base fill — dark navy
+    g.fillStyle(0x07071a, 1.0);
+    g.fillRect(0, 0, WORLD_W, WORLD_H);
+
+    // Very faint hex-grid overlay (suggests microscope slide)
+    g.lineStyle(0.5, 0x1a1a3a, 0.35);
+    const gs = 120;
+    for (let x = 0; x < WORLD_W; x += gs) { g.lineBetween(x, 0, x, WORLD_H); }
+    for (let y = 0; y < WORLD_H; y += gs) { g.lineBetween(0, y, WORLD_W, y); }
+
+    // Ghost bacteria — suggest a densely populated background community
+    const ghostPals = [PAL.npc0, PAL.npc1, PAL.npc2, PAL.npc3, PAL.player];
+    for (let i = 0; i < 120; i++) {
+      const x   = Phaser.Math.Between(0, WORLD_W);
+      const y   = Phaser.Math.Between(0, WORLD_H);
+      const ang = Math.random() * Math.PI * 2;
+      const s   = 0.4 + Math.random() * 0.5;
+      const pal = ghostPals[i % 5];
+      drawBacteriaSimple(g, x, y, ang, 10*s, 36*s, pal.outer, 0.25 + Math.random() * 0.2);
     }
-    // Orientation markers: very faint rings at world cardinal points
-    this.bgGfx.lineStyle(0.5, 0x003322, 0.3);
+
+    // Small cocci clusters
+    for (let i = 0; i < 80; i++) {
+      const cx = Phaser.Math.Between(0, WORLD_W), cy = Phaser.Math.Between(0, WORLD_H);
+      const pal = ghostPals[i % 5];
+      g.fillStyle(pal.outer, 0.12 + Math.random() * 0.1);
+      g.fillCircle(cx, cy, 3 + Math.random() * 5);
+      g.lineStyle(0.8, pal.outer, 0.25);
+      g.strokeCircle(cx, cy, 3 + Math.random() * 5);
+    }
+
+    // Faint radial orientation markers
+    g.lineStyle(0.5, 0x1a1a40, 0.25);
     for (let r = 400; r < 1600; r += 400) {
-      this.bgGfx.strokeCircle(WORLD_W/2, WORLD_H/2, r);
+      g.strokeCircle(WORLD_W/2, WORLD_H/2, r);
     }
   }
 
-  // ── Spawning ───────────────────────────────────────────────
+  // ── Spawning ──────────────────────────────────────────────
   _spawnFood(n) {
     for (let i = 0; i < n; i++) {
-      this.foodGroup.create(Phaser.Math.Between(50, WORLD_W-50), Phaser.Math.Between(50, WORLD_H-50), 'food').setDepth(5);
+      this.foodGroup.create(
+        Phaser.Math.Between(50, WORLD_W-50),
+        Phaser.Math.Between(50, WORLD_H-50),
+        'food'
+      ).setDepth(5);
     }
   }
 
@@ -1034,7 +1242,7 @@ class GameScene extends Phaser.Scene {
     }
   }
 
-  // ── Game over ──────────────────────────────────────────────
+  // ── Game over ─────────────────────────────────────────────
   _showGameOver(reason) {
     const elapsed = Math.floor((this.time.now - this.startTime) / 1000);
     const w = this.cameras.main.width, h = this.cameras.main.height;
@@ -1046,11 +1254,11 @@ class GameScene extends Phaser.Scene {
     }).setScrollFactor(0).setDepth(201).setOrigin(0.5);
 
     this.add.text(w/2, h/2, `${elapsed}s   ${this.killCount} kills`, {
-      fontSize: '16px', fill: '#556655', fontFamily: 'monospace'
+      fontSize: '16px', fill: '#556677', fontFamily: 'monospace'
     }).setScrollFactor(0).setDepth(201).setOrigin(0.5);
 
     const rb = this.add.text(w/2, h/2+55, 'tap or any key', {
-      fontSize: '12px', fill: '#00ff66', fontFamily: 'monospace'
+      fontSize: '12px', fill: '#ffd060', fontFamily: 'monospace'
     }).setScrollFactor(0).setDepth(201).setOrigin(0.5);
     this.tweens.add({ targets: rb, alpha: 0.15, duration: 700, yoyo: true, repeat: -1 });
 
@@ -1066,7 +1274,7 @@ class GameScene extends Phaser.Scene {
 // ═══════════════════════════════════════════════════════════
 const config = {
   type: Phaser.AUTO,
-  backgroundColor: '#000008',
+  backgroundColor: '#07071a',
   width:  window.innerWidth,
   height: window.innerHeight,
   physics: { default: 'arcade', arcade: { debug: false } },
