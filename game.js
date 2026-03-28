@@ -210,6 +210,79 @@ function drawBacteria(g, cx, cy, angle, rx, ry, pal, alpha, phase) {
   capsulePathWobble(g, cx, cy, rx * 0.93, ry * 0.93, cos, sin, phase + 0.3, 0.4); g.strokePath();
 }
 
+// Coccus — spherical bacterium (Staphylococcus, Streptococcus style)
+function drawCoccus(g, cx, cy, r, pal, alpha, phase) {
+  const a = alpha;
+  // Layered soft glow
+  g.lineStyle(r * 4,   pal.outer, 0.022 * a); g.strokeCircle(cx, cy, r);
+  g.lineStyle(r * 2.2, pal.outer, 0.04  * a); g.strokeCircle(cx, cy, r);
+  g.lineStyle(r * 0.9, pal.og,    0.09  * a); g.strokeCircle(cx, cy, r);
+  // Periplasm, cytoplasm, nucleoid
+  g.fillStyle(pal.peri, 0.45 * a); g.fillCircle(cx, cy, r);
+  g.fillStyle(pal.cyto, 0.82 * a); g.fillCircle(cx, cy, r * 0.76);
+  g.fillStyle(pal.nuc,  0.18 * a); g.fillCircle(cx, cy, r * 0.50);
+  g.fillStyle(pal.nuc,  0.42 * a); g.fillCircle(cx, cy, r * 0.28);
+  // Granules
+  pal.gran.forEach(function(gr) {
+    const wx = cx + gr[0] * r, wy = cy + gr[1] * r;
+    g.fillStyle(gr[3], 0.35 * a); g.fillCircle(wx, wy, gr[2] * 1.5);
+    g.fillStyle(gr[3], 0.75 * a); g.fillCircle(wx, wy, gr[2] * 0.65);
+  });
+  if (DETAIL) {
+    g.fillStyle(pal.ribo, 0.42 * a);
+    for (let i = 0; i < 7; i++) {
+      const t = (i / 7) * Math.PI * 2;
+      g.fillCircle(cx + Math.cos(t)*r*0.52, cy + Math.sin(t)*r*0.52, 1.0);
+    }
+  }
+  // Membrane + halo
+  g.lineStyle(1.6, pal.outer, 0.78 * a); g.strokeCircle(cx, cy, r);
+  g.lineStyle(0.7, pal.og,    0.38 * a); g.strokeCircle(cx, cy, r * 0.92);
+}
+
+// Vibrio — comma-shaped curved rod (Vibrio cholerae style)
+// Rendered as a thick curved arc with layered membrane detail
+function drawVibrio(g, cx, cy, angle, rx, ry, pal, alpha, phase) {
+  const a = alpha;
+  const segs   = 18;
+  const sweep  = 0.55;        // arc bend (radians ≈ 31°)
+  const R      = ry / sweep;  // radius of curvature
+  // Arc centre sits perpendicular to the cell's orientation
+  const acx = cx + Math.sin(angle) * R;
+  const acy = cy - Math.cos(angle) * R;
+  const midA = Math.atan2(cy - acy, cx - acx);
+  const a0 = midA - sweep / 2, a1 = midA + sweep / 2;
+
+  const arc = (radius, lw, col, la) => {
+    g.lineStyle(lw, col, la * a);
+    g.beginPath();
+    for (let i = 0; i <= segs; i++) {
+      const t = a0 + (i / segs) * (a1 - a0);
+      const wb = 1 + Math.sin(t * 3 + phase) * 0.55 / (radius + 1);
+      i === 0 ? g.moveTo(acx + Math.cos(t)*radius*wb, acy + Math.sin(t)*radius*wb)
+              : g.lineTo(acx + Math.cos(t)*radius*wb, acy + Math.sin(t)*radius*wb);
+    }
+    g.strokePath();
+  };
+
+  arc(R, rx * 5,   pal.outer, 0.022);
+  arc(R, rx * 3.5, pal.outer, 0.038);
+  arc(R, rx * 2.2, pal.peri,  0.68);
+  arc(R, rx * 1.4, pal.cyto,  0.90);
+  arc(R, rx * 0.45,pal.nuc,   0.38);
+  arc(R + rx, 1.5, pal.outer, 0.78);
+  arc(R - rx, 1.1, pal.outer, 0.55);
+  arc(R + rx * 0.3, rx * 0.7, pal.og, 0.14);
+
+  // Rounded end caps
+  [a0, a1].forEach(ta => {
+    const ecx = acx + Math.cos(ta) * R, ecy = acy + Math.sin(ta) * R;
+    g.fillStyle(pal.peri, 0.55 * a); g.fillCircle(ecx, ecy, rx * 0.85);
+    g.fillStyle(pal.cyto, 0.88 * a); g.fillCircle(ecx, ecy, rx * 0.6);
+    g.lineStyle(1.4, pal.outer, 0.8 * a); g.strokeCircle(ecx, ecy, rx * 0.85);
+  });
+}
+
 // Simplified rod — for background ghost cells (fast, capsule shape)
 function drawBacteriaSimple(g, cx, cy, angle, rx, ry, col, alpha) {
   const cos = Math.cos(angle), sin = Math.sin(angle);
@@ -295,23 +368,27 @@ class BootScene extends Phaser.Scene {
     fg.lineStyle(0.8, 0xffcc66, 0.6); fg.strokeCircle(16, 16, 8.5);
     fg.generateTexture('food', 32, 32); fg.destroy();
 
-    // Gene pickups: plasmid ring style
+    // Gene pickups: diamond/rhombus shape — clearly distinct from round food
     GENE_KEYS.forEach(key => {
       const c  = GENES[key].color;
       const gg = this.make.graphics({ x: 0, y: 0, add: false });
-      gg.lineStyle(14, c, 0.08); gg.strokeCircle(20, 20, 17);
-      gg.lineStyle(7,  c, 0.20); gg.strokeCircle(20, 20, 14);
-      gg.lineStyle(2.0, c, 1.0); gg.strokeCircle(20, 20, 11);
-      gg.fillStyle(c, 0.12);     gg.fillCircle(20, 20, 10);
-      // Double-helix ladder rungs
-      for (let i = 0; i <= 10; i++) {
-        const t = i / 10;
-        const x = 9 + t * 22;
-        const y1 = 20 + Math.sin(t * Math.PI * 2.5) * 8;
-        const y2 = 20 - Math.sin(t * Math.PI * 2.5) * 8;
-        gg.fillStyle(c, 0.95); gg.fillCircle(x, y1, 2.0); gg.fillCircle(x, y2, 2.0);
-        if (i % 2 === 0) { gg.lineStyle(0.8, c, 0.45); gg.lineBetween(x, y1, x, y2); }
-      }
+      const cx = 20, cy = 20, hw = 13, hh = 9; // half-width, half-height of diamond
+      // Glow
+      gg.lineStyle(10, c, 0.10);
+      gg.beginPath(); gg.moveTo(cx, cy-hh-4); gg.lineTo(cx+hw+4, cy); gg.lineTo(cx, cy+hh+4); gg.lineTo(cx-hw-4, cy); gg.closePath(); gg.strokePath();
+      gg.lineStyle(4, c, 0.25);
+      gg.beginPath(); gg.moveTo(cx, cy-hh-2); gg.lineTo(cx+hw+2, cy); gg.lineTo(cx, cy+hh+2); gg.lineTo(cx-hw-2, cy); gg.closePath(); gg.strokePath();
+      // Fill
+      gg.fillStyle(c, 0.12);
+      gg.fillTriangle(cx, cy-hh, cx+hw, cy, cx-hw, cy);
+      gg.fillTriangle(cx, cy+hh, cx+hw, cy, cx-hw, cy);
+      // Crisp outline
+      gg.lineStyle(2, c, 1.0);
+      gg.beginPath(); gg.moveTo(cx, cy-hh); gg.lineTo(cx+hw, cy); gg.lineTo(cx, cy+hh); gg.lineTo(cx-hw, cy); gg.closePath(); gg.strokePath();
+      // Gene symbol inside
+      gg.lineStyle(1, c, 0.6);
+      gg.lineBetween(cx-5, cy, cx+5, cy);
+      gg.lineBetween(cx, cy-4, cx, cy+4);
       gg.generateTexture('gene_' + key, 40, 40); gg.destroy();
     });
 
@@ -396,6 +473,7 @@ class GameScene extends Phaser.Scene {
     this.startTime     = this.time.now;
     this.killCount     = 0;
     this.score         = 0;
+    this.thrustAngle   = -Math.PI / 2;  // initially pointing up
     this.touchFission  = false;
     this.touchBact     = false;
     this.touchConj     = false;
@@ -500,8 +578,26 @@ class GameScene extends Phaser.Scene {
     this.npcCells.forEach(npc => {
       if (!npc.active) return;
       const na = Phaser.Math.DegToRad(npc.angle - 90);
-      drawBacteria(g, npc.x, npc.y, na, 8 * CELL_S, 50 * CELL_S, npc.palette, 1.0, npc.flagPhase);
-      this._drawFlagellum(fg, npc.x, npc.y, na, npc.flagPhase, npc.palette, 1.0, 52 * CELL_S);
+      switch (npc.shape) {
+        case 'coccus':
+          drawCoccus(g, npc.x, npc.y, 14 * CELL_S, npc.palette, 1.0, npc.flagPhase);
+          break;
+        case 'vibrio':
+          drawVibrio(g, npc.x, npc.y, na, 8 * CELL_S, 44 * CELL_S, npc.palette, 1.0, npc.flagPhase);
+          this._drawFlagellum(fg, npc.x, npc.y, na, npc.flagPhase, npc.palette, 1.0, 48 * CELL_S);
+          break;
+        case 'filament':
+          drawBacteria(g, npc.x, npc.y, na, 4 * CELL_S, 72 * CELL_S, npc.palette, 1.0, npc.flagPhase);
+          this._drawFlagellum(fg, npc.x, npc.y, na, npc.flagPhase, npc.palette, 1.0, 74 * CELL_S);
+          break;
+        case 'short': // coccobacillus — squat rod
+          drawBacteria(g, npc.x, npc.y, na, 12 * CELL_S, 20 * CELL_S, npc.palette, 1.0, npc.flagPhase);
+          this._drawFlagellum(fg, npc.x, npc.y, na, npc.flagPhase, npc.palette, 1.0, 22 * CELL_S);
+          break;
+        default: // rod
+          drawBacteria(g, npc.x, npc.y, na, 8 * CELL_S, 50 * CELL_S, npc.palette, 1.0, npc.flagPhase);
+          this._drawFlagellum(fg, npc.x, npc.y, na, npc.flagPhase, npc.palette, 1.0, 52 * CELL_S);
+      }
     });
   }
 
@@ -643,21 +739,13 @@ class GameScene extends Phaser.Scene {
     if (tumbleKey && !this.tumbling) {
       this.tumbling    = true;
       this.tumbleTimer = 350 + Math.random() * 200;
-      this.tumbleAngle = (Math.random() < 0.5 ? -1 : 1) * (90 + Math.random() * 180);
+      this.tumbleAngle = (Math.random() < 0.5 ? -1 : 1) * (Math.PI * 0.5 + Math.random() * Math.PI);
       this.player.body.setAcceleration(0, 0);
     }
     if (this.tumbling) {
-      this.player.angle += this.tumbleAngle * dt;
-      this.tumbleTimer  -= delta;
+      this.thrustAngle += this.tumbleAngle * dt;
+      this.tumbleTimer -= delta;
       if (this.tumbleTimer <= 0) this.tumbling = false;
-      return;
-    }
-
-    if (this.joystick.active && (Math.abs(this.joystick.dx) > 0.1 || Math.abs(this.joystick.dy) > 0.1)) {
-      this.player.body.setAcceleration(this.joystick.dx * baseSpeed * 2.2, this.joystick.dy * baseSpeed * 2.2);
-      this.player.rotation = Math.atan2(this.joystick.dy, this.joystick.dx) + Math.PI / 2;
-      this.flagSpeed = 1.0;
-      return;
     }
 
     const up    = this.cursors.up.isDown    || this.wasd.up.isDown;
@@ -665,20 +753,25 @@ class GameScene extends Phaser.Scene {
     const left  = this.cursors.left.isDown  || this.wasd.left.isDown;
     const right = this.cursors.right.isDown || this.wasd.right.isDown;
 
-    if (left)  this.player.angle -= 3;
-    if (right) this.player.angle += 3;
+    // A/D steer the thrust angle, not the cell body directly
+    if (left)  this.thrustAngle -= 3 * dt * 60 * (Math.PI / 180);
+    if (right) this.thrustAngle += 3 * dt * 60 * (Math.PI / 180);
 
     if (up) {
-      const rad = Phaser.Math.DegToRad(this.player.angle - 90);
-      this.player.body.setAcceleration(Math.cos(rad) * baseSpeed * 2, Math.sin(rad) * baseSpeed * 2);
+      this.player.body.setAcceleration(Math.cos(this.thrustAngle) * baseSpeed * 2, Math.sin(this.thrustAngle) * baseSpeed * 2);
       this.flagSpeed = 1.0;
     } else if (down) {
-      const rad = Phaser.Math.DegToRad(this.player.angle + 90);
-      this.player.body.setAcceleration(Math.cos(rad) * baseSpeed, Math.sin(rad) * baseSpeed);
+      this.player.body.setAcceleration(Math.cos(this.thrustAngle + Math.PI) * baseSpeed, Math.sin(this.thrustAngle + Math.PI) * baseSpeed);
       this.flagSpeed = 0.5;
     } else {
       this.player.body.setAcceleration(0, 0);
       this.flagSpeed = Math.max(0, this.flagSpeed - 0.03);
+    }
+
+    // Cell visual rotation always follows actual velocity (inertia)
+    const vx = this.player.body.velocity.x, vy = this.player.body.velocity.y;
+    if (Math.hypot(vx, vy) > 18) {
+      this.player.rotation = Math.atan2(vy, vx) + Math.PI / 2;
     }
   }
 
@@ -716,6 +809,7 @@ class GameScene extends Phaser.Scene {
       npc.hp         = 2;
       npc.genes      = new Set();
       npc.palette    = NPC_PALS[i % 4];
+      npc.shape      = ['rod','coccus','vibrio','filament','short'][i % 5];
       const shuffled = Phaser.Utils.Array.Shuffle([...GENE_KEYS]);
       npc.genes.add(shuffled[0]);
       if (Math.random() < 0.5) npc.genes.add(shuffled[1]);
@@ -1207,8 +1301,7 @@ class GameScene extends Phaser.Scene {
         const power = Math.min(dist, 100) / 100;
         this.player.body.velocity.x += nx * baseSpeed * 1.8 * power;
         this.player.body.velocity.y += ny * baseSpeed * 1.8 * power;
-        // Rotate cell to face swipe direction
-        this.player.rotation = Math.atan2(ny, nx) + Math.PI / 2;
+        this.thrustAngle = Math.atan2(ny, nx);  // steer toward swipe direction
         this.flagSpeed = power;
       }
     });
