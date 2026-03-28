@@ -64,58 +64,46 @@ function fillEllipse(g, cx, cy, rx, ry, cos, sin, segs = 28) {
   }
 }
 
-// Draw a rod-shaped bacterium
+// Draw a rod-shaped bacterium — clean, minimal
 function drawBacteria(g, cx, cy, angle, rx, ry, color, alpha) {
   const cos = Math.cos(angle), sin = Math.sin(angle);
   const a = alpha;
 
-  // Glow layers
-  g.lineStyle(16, color, 0.04 * a); ellipsePath(g, cx, cy, rx+16, ry+16, cos, sin); g.strokePath();
-  g.lineStyle(8,  color, 0.10 * a); ellipsePath(g, cx, cy, rx+8,  ry+8,  cos, sin); g.strokePath();
-  g.lineStyle(3,  color, 0.20 * a); ellipsePath(g, cx, cy, rx+3,  ry+3,  cos, sin); g.strokePath();
-
-  // Interior subtle fill
-  g.fillStyle(color, 0.05 * a);
-  fillEllipse(g, cx, cy, rx, ry, cos, sin);
-
-  // Membrane (sharp)
-  g.lineStyle(1.8, color, 0.95 * a);
+  // Single soft bloom (one wide pass, not stacked rings)
+  g.lineStyle(rx * 2.2, color, 0.055 * a);
   ellipsePath(g, cx, cy, rx, ry, cos, sin); g.strokePath();
 
-  // Nucleoid (elongated DNA region)
-  g.lineStyle(1.0, color, 0.38 * a);
-  ellipsePath(g, cx, cy, rx * 0.55, ry * 0.42, cos, sin); g.strokePath();
+  // Inner glow halo
+  g.lineStyle(5, color, 0.18 * a);
+  ellipsePath(g, cx, cy, rx + 2, ry + 2, cos, sin); g.strokePath();
 
-  // Ribosome dots
-  g.fillStyle(color, 0.36 * a);
-  for (let i = 0; i < 6; i++) {
-    const ta = (i / 6) * Math.PI * 2;
-    const ex = Math.cos(ta) * rx * 0.62, ey = Math.sin(ta) * ry * 0.62;
-    g.fillCircle(cx + ex * cos - ey * sin, cy + ex * sin + ey * cos, 1.8);
-  }
+  // Interior — very faint fill so it doesn't look hollow
+  g.fillStyle(color, 0.06 * a);
+  fillEllipse(g, cx, cy, rx, ry, cos, sin);
+
+  // Membrane — crisp, bright
+  g.lineStyle(1.6, color, alpha);
+  ellipsePath(g, cx, cy, rx, ry, cos, sin); g.strokePath();
+
+  // Nucleoid — single dim inner ellipse, no dots
+  g.lineStyle(0.8, color, 0.28 * a);
+  ellipsePath(g, cx, cy, rx * 0.5, ry * 0.38, cos, sin); g.strokePath();
 }
 
-// Draw the predator (eukaryote blob, not rotated)
+// Draw the predator (eukaryote blob — larger, menacing)
 function drawPredator(g, cx, cy, rx, ry, alpha) {
   const c = COL.predator, a = alpha;
-  g.lineStyle(20, c, 0.04 * a); g.strokeEllipse(cx, cy, rx*2+20, ry*2+20);
-  g.lineStyle(10, c, 0.10 * a); g.strokeEllipse(cx, cy, rx*2+10, ry*2+10);
-  g.lineStyle(4,  c, 0.20 * a); g.strokeEllipse(cx, cy, rx*2+4,  ry*2+4);
-  g.fillStyle(c,  0.05 * a);    g.fillEllipse(cx, cy, rx*2, ry*2);
-  g.lineStyle(2,  c, 0.95 * a); g.strokeEllipse(cx, cy, rx*2, ry*2);
-  // nucleus
-  g.lineStyle(2, c, 0.5 * a);   g.strokeCircle(cx, cy, rx * 0.28);
-  g.fillStyle(c, 0.2 * a);      g.fillCircle(cx, cy, rx * 0.14);
-  // organelles
-  g.lineStyle(1, c, 0.25 * a);
-  g.strokeEllipse(cx + rx*0.4, cy - ry*0.2, rx*0.28, ry*0.18);
-  g.strokeEllipse(cx - rx*0.35, cy + ry*0.25, rx*0.26, ry*0.16);
-  // ribosomes
-  g.fillStyle(c, 0.32 * a);
-  for (let i = 0; i < 9; i++) {
-    const ta = (i / 9) * Math.PI * 2;
-    g.fillCircle(cx + Math.cos(ta)*rx*0.55, cy + Math.sin(ta)*ry*0.52, 2);
-  }
+  // Bloom
+  g.lineStyle(rx * 1.8, c, 0.05 * a); g.strokeEllipse(cx, cy, rx*2, ry*2);
+  // Inner glow
+  g.lineStyle(8, c, 0.18 * a);        g.strokeEllipse(cx, cy, rx*2+4, ry*2+4);
+  // Fill
+  g.fillStyle(c, 0.07 * a);           g.fillEllipse(cx, cy, rx*2, ry*2);
+  // Membrane
+  g.lineStyle(2, c, alpha);            g.strokeEllipse(cx, cy, rx*2, ry*2);
+  // Nucleus (round, eukaryote)
+  g.lineStyle(1.2, c, 0.45 * a);      g.strokeCircle(cx, cy, rx * 0.3);
+  g.fillStyle(c, 0.12 * a);           g.fillCircle(cx, cy, rx * 0.18);
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -175,9 +163,9 @@ class GameScene extends Phaser.Scene {
 
     // Food + genes
     this.foodGroup = this.physics.add.staticGroup();
-    this._spawnFood(50);
+    this._spawnFood(80);
     this.geneGroup = this.physics.add.staticGroup();
-    this._spawnGenes(15);
+    this._spawnGenes(20);
 
     // ── Player (invisible physics body, drawn as graphics) ──
     this.player = this.physics.add.image(WORLD_W / 2, WORLD_H / 2, 'phys');
@@ -193,7 +181,7 @@ class GameScene extends Phaser.Scene {
 
     // ── NPC bacteria ──
     this.npcCells = [];
-    this._spawnNPCs(5);
+    this._spawnNPCs(8);
 
     // ── Predator (also invisible, drawn as graphics) ──
     this.predator = this.physics.add.image(
@@ -302,8 +290,8 @@ class GameScene extends Phaser.Scene {
     drawBacteria(g,
       this.player.x, this.player.y,
       angle,
-      17 * CELL_S * this.fissionScale.x,
-      72 * CELL_S * this.fissionScale.y,
+      10 * CELL_S * this.fissionScale.x,
+      38 * CELL_S * this.fissionScale.y,
       cellColor, pa
     );
     this._drawOrganelles(og, this.player.x, this.player.y, angle, cellColor, pa, CELL_S);
@@ -311,29 +299,29 @@ class GameScene extends Phaser.Scene {
     // Flagellum
     const backAngle = angle + Math.PI;
     this.flagPhase += 0.12 + this.flagSpeed * 0.18;
-    const pRear = 78 * CELL_S;
+    const pRear = 42 * CELL_S;
     this._drawFlagellum(fg, this.player.x, this.player.y, angle, this.flagPhase, cellColor, pa, pRear);
     if (this.activeGenes.has('FLAGELLUM')) {
       this._drawFlagellum(fg, this.player.x, this.player.y, angle + 0.35, this.flagPhase + Math.PI, cellColor, pa, pRear);
     }
 
     // Predator
-    drawPredator(g, this.predator.x, this.predator.y, 72, 58, 1.0);
+    drawPredator(g, this.predator.x, this.predator.y, 48 * CELL_S, 38 * CELL_S, 1.0);
 
     // Daughters
     this.daughters.forEach(d => {
       if (!d.active) return;
       const da = Phaser.Math.DegToRad(d.angle - 90);
-      drawBacteria(g, d.x, d.y, da, 13 * CELL_S, 52 * CELL_S, COL.daughter, 1.0);
-      this._drawFlagellum(fg, d.x, d.y, da, d.flagPhase, COL.daughter, 1.0, 58 * CELL_S);
+      drawBacteria(g, d.x, d.y, da, 8 * CELL_S, 30 * CELL_S, COL.daughter, 1.0);
+      this._drawFlagellum(fg, d.x, d.y, da, d.flagPhase, COL.daughter, 1.0, 34 * CELL_S);
     });
 
     // NPCs
     this.npcCells.forEach(npc => {
       if (!npc.active) return;
       const na = Phaser.Math.DegToRad(npc.angle - 90);
-      drawBacteria(g, npc.x, npc.y, na, 13 * CELL_S, 52 * CELL_S, COL.npc, 1.0);
-      this._drawFlagellum(fg, npc.x, npc.y, na, npc.flagPhase, COL.npc, 1.0, 58 * CELL_S);
+      drawBacteria(g, npc.x, npc.y, na, 8 * CELL_S, 30 * CELL_S, COL.npc, 1.0);
+      this._drawFlagellum(fg, npc.x, npc.y, na, npc.flagPhase, COL.npc, 1.0, 34 * CELL_S);
     });
   }
 
@@ -368,7 +356,7 @@ class GameScene extends Phaser.Scene {
     const cos = Math.cos(angle), sin = Math.sin(angle);
     const rot = (x, y) => ({ x: px + x*cos - y*sin, y: py + x*sin + y*cos });
 
-    const s = scale;
+    const s = (scale || 1) * 0.55;  // match reduced cell size
     if (this.activeGenes.has('HSP')) {
       og.fillStyle(GENES.HSP.color, 0.72 * alpha);
       [[-4,-44],[4,-44],[-4,44],[4,44],[0,-28],[0,28]].forEach(([x, y]) => {
