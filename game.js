@@ -478,6 +478,9 @@ class GameScene extends Phaser.Scene {
     this.touchBact     = false;
     this.touchConj     = false;
     this.fissionScale  = { x: 1, y: 1 };
+    this.showingInstructions = false;
+    this.time.delayedCall(120, () => this._showInstructions());
+
     // Ocean current — slow drift that shifts direction over time
     this.current = {
       angle:          Math.random() * Math.PI * 2,
@@ -489,6 +492,7 @@ class GameScene extends Phaser.Scene {
   }
 
   update(time, delta) {
+    if (this.showingInstructions) return;
     if (!this.alive || this.dying) return;
     const dt = delta / 1000;
 
@@ -1415,6 +1419,60 @@ class GameScene extends Phaser.Scene {
       g.setData('geneKey', key);
       this.tweens.add({ targets: g, y: y-7, duration: 1500+Math.random()*500, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
     }
+  }
+
+  // ── Instructions overlay ──────────────────────────────────
+  _showInstructions() {
+    this.showingInstructions = true;
+    const w = this.cameras.main.width, h = this.cameras.main.height;
+    const isMobile = w < 700;
+
+    const panel = this.add.graphics().setScrollFactor(0).setDepth(300);
+    const pw = Math.min(w - 40, 340), ph = isMobile ? 310 : 280;
+    const px = (w - pw) / 2, py = (h - ph) / 2;
+    panel.fillStyle(0x07071a, 0.94); panel.fillRoundedRect(px, py, pw, ph, 10);
+    panel.lineStyle(1.5, 0xffd060, 0.55); panel.strokeRoundedRect(px, py, pw, ph, 10);
+
+    const lines = [
+      ['SURVIVE', 0xffd060, 16, true],
+      ['', 0x556677, 10, false],
+      isMobile
+        ? ['Swipe left half of screen to swim', 0xaaccbb, 11, false]
+        : ['W/↑ thrust  ·  A/D steer  ·  Space tumble', 0xaaccbb, 11, false],
+      ['Cell faces direction of movement', 0x667788, 10, false],
+      ['', 0x556677, 10, false],
+      ['Eat orange ● food to gain energy', 0xff9933, 11, false],
+      ['Collect ◆ gene pickups (max 3)', 0xffd060, 11, false],
+      ['Avoid the large red predator', 0xff4444, 11, false],
+      ['', 0x556677, 10, false],
+      [isMobile ? '÷ DIVIDE button  (need 150% energy)' : 'F key to divide  (need 150% energy)', 0x88ffcc, 11, false],
+      [isMobile ? 'B = antimicrobial  ·  C = gene transfer' : 'B = antimicrobial burst  ·  C = conjugate', 0xaaaaff, 10, false],
+      ['', 0x556677, 10, false],
+      ['tap to begin', 0xffd060, 12, false],
+    ];
+
+    const objs = [panel];
+    let ty = py + 22;
+    lines.forEach(([text, color, size, bold]) => {
+      if (!text) { ty += 6; return; }
+      const t = this.add.text(w / 2, ty, text, {
+        fontSize: size + 'px',
+        fill: '#' + color.toString(16).padStart(6, '0'),
+        fontFamily: 'monospace',
+        fontStyle: bold ? 'bold' : 'normal',
+      }).setScrollFactor(0).setDepth(301).setOrigin(0.5, 0);
+      objs.push(t);
+      ty += size + 7;
+    });
+
+    const dismiss = () => {
+      objs.forEach(o => o.destroy());
+      this.showingInstructions = false;
+    };
+    this.time.delayedCall(400, () => {
+      this.input.once('pointerdown', dismiss);
+      this.input.keyboard.once('keydown', dismiss);
+    });
   }
 
   // ── Game over ─────────────────────────────────────────────
