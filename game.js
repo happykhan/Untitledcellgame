@@ -1486,26 +1486,72 @@ class GameScene extends Phaser.Scene {
   // ── Game over ─────────────────────────────────────────────
   _showGameOver(reason) {
     const elapsed = Math.floor((this.time.now - this.startTime) / 1000);
-    const w = this.cameras.main.width, h = this.cameras.main.height;
-    const ov = this.add.graphics().setScrollFactor(0).setDepth(200);
-    ov.fillStyle(0x000000, 0.88); ov.fillRect(0, 0, w, h);
+    const score   = elapsed * 10 + this.killCount * 25;
 
-    this.add.text(w/2, h/2-55, reason || 'DEAD', {
-      fontSize: '32px', fill: '#ff2244', fontFamily: 'monospace'
-    }).setScrollFactor(0).setDepth(201).setOrigin(0.5);
+    const LS_KEY  = 'ucg_scores';
+    let scores    = [];
+    try { scores = JSON.parse(localStorage.getItem(LS_KEY) || '[]'); } catch(e) {}
+    const lastName = localStorage.getItem('ucg_last_name') || '';
 
-    this.add.text(w/2, h/2, `${elapsed}s   ${this.killCount} kills`, {
-      fontSize: '16px', fill: '#556677', fontFamily: 'monospace'
-    }).setScrollFactor(0).setDepth(201).setOrigin(0.5);
+    const top5 = [...scores].sort((a, b) => b.score - a.score).slice(0, 5);
+    const lbRows = top5.length
+      ? top5.map((s, i) => `
+          <div style="display:flex;justify-content:space-between;gap:16px;
+            color:${i === 0 ? '#ffd060' : '#aaccbb'};font-size:13px;padding:3px 0;border-bottom:1px solid #1a1a2a">
+            <span>${i + 1}. ${s.name || 'ANON'}</span>
+            <span>${s.score}pts &nbsp; ${s.elapsed}s &nbsp; ${s.kills}k</span>
+          </div>`).join('')
+      : '<div style="color:#445566;font-size:12px;padding:6px 0">no scores yet</div>';
 
-    const rb = this.add.text(w/2, h/2+55, 'tap or any key', {
-      fontSize: '12px', fill: '#ffd060', fontFamily: 'monospace'
-    }).setScrollFactor(0).setDepth(201).setOrigin(0.5);
-    this.tweens.add({ targets: rb, alpha: 0.15, duration: 700, yoyo: true, repeat: -1 });
+    const div = document.createElement('div');
+    div.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;' +
+      'background:rgba(0,0,0,0.92);display:flex;align-items:center;justify-content:center;' +
+      'z-index:9999;font-family:monospace,Courier New;';
 
-    this.time.delayedCall(400, () => {
-      this.input.keyboard.once('keydown', () => this.scene.restart());
-      this.input.once('pointerdown',      () => this.scene.restart());
+    div.innerHTML = `
+      <div style="border:1.5px solid rgba(255,34,68,0.45);border-radius:10px;
+        background:rgba(10,10,30,0.98);padding:28px 32px;max-width:360px;
+        width:calc(100% - 48px);text-align:center;line-height:1.7;">
+        <div style="font-size:24px;font-weight:bold;color:#ff2244;letter-spacing:2px;margin-bottom:4px">
+          ${reason || 'DEAD'}</div>
+        <div style="font-size:13px;color:#aaccbb;margin-bottom:2px">${elapsed}s &nbsp;·&nbsp; ${this.killCount} kills</div>
+        <div style="font-size:26px;font-weight:bold;color:#ffd060;margin-bottom:18px">${score} pts</div>
+
+        <input id="ucg-name" type="text" maxlength="16" placeholder="your name"
+          value="${lastName.replace(/"/g, '')}"
+          style="width:100%;box-sizing:border-box;background:#0a0a20;
+            border:1px solid rgba(255,208,96,0.35);border-radius:6px;
+            color:#ffd060;font-family:monospace,Courier New;font-size:16px;
+            padding:8px 12px;text-align:center;outline:none;margin-bottom:18px"/>
+
+        <div style="font-size:10px;color:#556677;letter-spacing:2px;margin-bottom:8px">HIGH SCORES</div>
+        <div style="margin-bottom:20px;padding:8px 12px;background:#05050f;border-radius:6px;text-align:left">
+          ${lbRows}</div>
+
+        <button id="ucg-submit" style="background:#ffd060;color:#07071a;border:none;border-radius:6px;
+          font-family:monospace,Courier New;font-size:14px;font-weight:bold;
+          padding:10px 32px;cursor:pointer;letter-spacing:1px;">PLAY AGAIN</button>
+      </div>`;
+
+    document.body.appendChild(div);
+
+    const submit = () => {
+      const name = (document.getElementById('ucg-name')?.value || '').trim() || 'ANON';
+      localStorage.setItem('ucg_last_name', name);
+      scores.push({ name, score, elapsed, kills: this.killCount, date: Date.now() });
+      scores.sort((a, b) => b.score - a.score);
+      scores.splice(20);
+      localStorage.setItem(LS_KEY, JSON.stringify(scores));
+      if (document.body.contains(div)) document.body.removeChild(div);
+      this.scene.restart();
+    };
+
+    this.time.delayedCall(100, () => {
+      document.getElementById('ucg-submit')?.addEventListener('click', submit);
+      document.getElementById('ucg-name')?.addEventListener('keydown', e => {
+        if (e.key === 'Enter') submit();
+      });
+      document.getElementById('ucg-name')?.focus();
     });
   }
 }
