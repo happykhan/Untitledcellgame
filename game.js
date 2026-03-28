@@ -340,7 +340,7 @@ class GameScene extends Phaser.Scene {
     this.player = this.physics.add.image(WORLD_W / 2, WORLD_H / 2, 'phys');
     this.player.setAlpha(0).setCollideWorldBounds(true).setBounce(1, 1)
                .setDamping(true).setDrag(0.90).setMaxVelocity(340).setDepth(10);
-    this.player.body.setCircle(22, -20, -20);
+    this.player.body.setCircle(16, -14, -14);
 
     this.entityGfx    = this.add.graphics().setDepth(9);
     this.flagGfx      = this.add.graphics().setDepth(8);
@@ -474,15 +474,15 @@ class GameScene extends Phaser.Scene {
     const pal = this._getPlayerPalette();
     const pa = this.playerAlpha;
 
-    const rx = 14 * CELL_S * this.fissionScale.x;
-    const ry = 52 * CELL_S * this.fissionScale.y;
+    const rx = 9 * CELL_S * this.fissionScale.x;
+    const ry = 62 * CELL_S * this.fissionScale.y;
     const angle = this.player.rotation;
 
     drawBacteria(g, this.player.x, this.player.y, angle, rx, ry, pal, pa, this.flagPhase);
     this._drawOrganelles(og, this.player.x, this.player.y, angle, pal.outer, pa, CELL_S);
 
     this.flagPhase += 0.12 + this.flagSpeed * 0.18;
-    const pRear = 55 * CELL_S;
+    const pRear = 64 * CELL_S;
     this._drawFlagellum(fg, this.player.x, this.player.y, angle, this.flagPhase, pal, pa, pRear);
     if (this.activeGenes.has('FLAGELLUM')) {
       this._drawFlagellum(fg, this.player.x, this.player.y, angle + 0.35, this.flagPhase + Math.PI, pal, pa, pRear);
@@ -493,15 +493,15 @@ class GameScene extends Phaser.Scene {
     this.daughters.forEach(d => {
       if (!d.active) return;
       const da = Phaser.Math.DegToRad(d.angle - 90);
-      drawBacteria(g, d.x, d.y, da, 10 * CELL_S, 38 * CELL_S, PAL.daughter, 1.0, d.flagPhase);
-      this._drawFlagellum(fg, d.x, d.y, da, d.flagPhase, PAL.daughter, 1.0, 42 * CELL_S);
+      drawBacteria(g, d.x, d.y, da, 8 * CELL_S, 50 * CELL_S, PAL.daughter, 1.0, d.flagPhase);
+      this._drawFlagellum(fg, d.x, d.y, da, d.flagPhase, PAL.daughter, 1.0, 52 * CELL_S);
     });
 
     this.npcCells.forEach(npc => {
       if (!npc.active) return;
       const na = Phaser.Math.DegToRad(npc.angle - 90);
-      drawBacteria(g, npc.x, npc.y, na, 10 * CELL_S, 38 * CELL_S, npc.palette, 1.0, npc.flagPhase);
-      this._drawFlagellum(fg, npc.x, npc.y, na, npc.flagPhase, npc.palette, 1.0, 42 * CELL_S);
+      drawBacteria(g, npc.x, npc.y, na, 8 * CELL_S, 50 * CELL_S, npc.palette, 1.0, npc.flagPhase);
+      this._drawFlagellum(fg, npc.x, npc.y, na, npc.flagPhase, npc.palette, 1.0, 52 * CELL_S);
     });
   }
 
