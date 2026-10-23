@@ -55,6 +55,7 @@ function image(x = 1600, y = 1600) {
     "setDrag",
     "setMaxVelocity",
     "setDepth",
+    "setVisible",
   ])
     obj[method] = () => obj;
   return obj;
@@ -70,6 +71,9 @@ function scene() {
     activeGenes: new Set(["HSP", "MEMBRANE"]),
     daughters: [],
     divisionCount: 0,
+    nextCellId: 0,
+    foodGroup: { getChildren: () => [] },
+    geneGroup: { getChildren: () => [] },
     fxGfx: { clear() {} },
     time: { now: 0 },
     hud: { notify() {} },
@@ -219,10 +223,22 @@ test("pause freezes the simulation clock without a wall-clock adjustment", () =>
   assert.equal(s.elapsedMs, 5000);
 });
 
+test("the finished round stops submitting 3D frames behind the score screen", () => {
+  const s = scene();
+  s.elapsedMs = 5000;
+  s.roundOver = true;
+  s.worldView = {
+    update() {
+      throw new Error("finished rounds must not submit frames");
+    },
+  };
+  s.update(90000, 16);
+  assert.equal(s.elapsedMs, 5000);
+});
+
 test("a dying cell still renders its shrinking membrane while its score stays frozen", () => {
   const s = scene();
-  let clears = 0;
-  const graphics = new Proxy({}, { get: (_, method) => (method === "clear" ? () => clears++ : () => {}) });
+  let displayedState;
   Object.assign(s, {
     alive: false,
     dying: true,
@@ -234,14 +250,17 @@ test("a dying cell still renders its shrinking membrane while its score stays fr
     fissionScale: { x: 0.4, y: 0.4 },
     npcCells: [],
     predator: { x: 2500, y: 2500 },
-    layers: { cells: graphics, flagella: graphics, organelles: graphics },
+    worldView: {
+      update(settings, state) {
+        displayedState = state;
+      },
+    },
     cameras: { main: {} },
     swimInput: { draw() {} },
     _updateHUD() {},
-    _updateEnvTint() {},
   });
   s.update(90000, 16);
-  assert.equal(clears, 3);
+  assert.deepEqual(displayedState.fissionScale, { x: 0.4, y: 0.4 });
   assert.equal(s.elapsedMs, 5000);
 });
 

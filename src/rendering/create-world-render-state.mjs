@@ -1,5 +1,6 @@
 function createCellAppearance(cell) {
   return {
+    renderId: cell.renderId,
     x: cell.x,
     y: cell.y,
     rotation: cell.rotation,
@@ -24,6 +25,10 @@ export function createWorldRenderState({
   fissionProgress,
   fissioning,
   feedGlow,
+  elapsedMs,
+  temp,
+  foodGroup,
+  geneGroup,
 }) {
   return {
     player: createCellAppearance(player),
@@ -38,5 +43,15 @@ export function createWorldRenderState({
     fissionProgress,
     fissioning,
     feedGlow,
+    elapsedMs,
+    temperature: temp,
+    food: foodGroup
+      .getChildren()
+      .filter((item) => item.active)
+      .map((item) => ({ x: item.x, y: item.y, scale: item.scaleX })),
+    genePickups: geneGroup
+      .getChildren()
+      .filter((item) => item.active)
+      .map((item) => ({ x: item.x, y: item.y, key: item.getData("geneKey") })),
   };
 }

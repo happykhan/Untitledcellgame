@@ -1,6 +1,6 @@
 import { GENES, GENE_KEYS, WORLD_W, WORLD_H, getViewportSettings } from "./config.mjs";
 import { NPC_PALS, getPlayerPalette } from "./rendering/palettes.mjs";
-import { createWorldLayers, renderWorld } from "./rendering/world-renderer.mjs";
+import createWorldView from "./rendering/create-world-view.mjs";
 import { createWorldRenderState } from "./rendering/create-world-render-state.mjs";
 import {
   canControlCell,
@@ -14,6 +14,7 @@ import { loadScoreboard, saveRunScore } from "./domain/score-store.mjs";
 import createHudState from "./ui/create-hud-state.mjs";
 import { showInstructions, showGameOver } from "./ui/run-overlays.mjs";
 import SwimInput from "./input/swim-input.mjs";
+import SwimGuide from "./input/swim-guide.mjs";
 import CellHUD from "./ui/cell-hud.mjs";
 
 export default class GameScene extends Phaser.Scene {
@@ -24,8 +25,6 @@ export default class GameScene extends Phaser.Scene {
   create() {
     this.physics.world.setBounds(0, 0, WORLD_W, WORLD_H);
     this.cameras.main.setBounds(0, 0, WORLD_W, WORLD_H);
-
-    this.layers = createWorldLayers(this.add);
 
     this.foodGroup = this.physics.add.staticGroup();
     this._spawnFood(100, { x: WORLD_W / 2 + 110, y: WORLD_H / 2 - 170 });
@@ -46,6 +45,7 @@ export default class GameScene extends Phaser.Scene {
     this.fxGfx = this.add.graphics().setDepth(20);
 
     this.npcCells = [];
+    this.nextCellId = 0;
     this._spawnNPCs(18);
 
     this.predator = this.physics.add.image(
@@ -74,6 +74,7 @@ export default class GameScene extends Phaser.Scene {
       this.cameras.main.setZoom(this.viewport.zoom);
       this.cameras.main.centerOn(this.player.x, this.player.y);
       this.swimInput?.reset();
+      this.worldView?.resize(gameSize.width, gameSize.height);
     };
     this.scale.on("resize", resize);
     this.events.once("shutdown", () => this.scale.off("resize", resize));
@@ -105,6 +106,7 @@ export default class GameScene extends Phaser.Scene {
     this.conjDuration = 1800;
     this.elapsedMs = 0;
     this.paused = false;
+    this.roundOver = false;
     this.nextHudUpdate = 0;
     this.closeOverlay = null;
     this.killCount = 0;
@@ -123,6 +125,20 @@ export default class GameScene extends Phaser.Scene {
       changeInterval: 18000,
       targetAngle: Math.random() * Math.PI * 2,
     };
+    this.worldView = createWorldView({
+      add: this.add,
+      camera: this.cameras.main,
+      width: this.scale.width,
+      height: this.scale.height,
+      force2D: new URLSearchParams(window.location.search).get("renderer") === "2d",
+      onModeChange: (mode) => {
+        for (const pickup of [...this.foodGroup.getChildren(), ...this.geneGroup.getChildren()])
+          pickup.setVisible(mode === "2d");
+      },
+    });
+    const drawWorld = () => this.worldView.draw();
+    this.events.on("render", drawWorld);
+    this.worldView.update(this.viewport, createWorldRenderState(this), 0);
     this._createHUD();
     this._setupKeyboard();
     this._setupTouch();
@@ -136,11 +152,13 @@ export default class GameScene extends Phaser.Scene {
       this.closeOverlay?.();
       this.swimInput.destroy();
       this.hud.destroy();
+      this.events.off("render", drawWorld);
+      this.worldView.destroy();
     });
   }
 
   update(time, delta) {
-    if (this.showingInstructions || this.paused) return;
+    if (this.showingInstructions || this.paused || this.roundOver) return;
     const frameDelta = Math.min(delta, 50);
     const dt = frameDelta / 1000;
     if (this.alive && !this.dying) {
@@ -153,11 +171,10 @@ export default class GameScene extends Phaser.Scene {
       if (this.alive) this._updateWorld(frameDelta, dt);
     }
     this.feedGlow = Math.max(0, this.feedGlow - dt * 2);
-    renderWorld(this.layers, this.cameras.main, this.viewport, createWorldRenderState(this));
+    this.worldView.update(this.viewport, createWorldRenderState(this), delta);
     this.flagPhase += ((0.12 + this.flagSpeed * 0.18) * frameDelta) / 16.667;
     this.swimInput.draw();
     this._updateHUD(time);
-    this._updateEnvTint();
   }
 
   _updateWorld(delta, dt) {
@@ -314,6 +331,7 @@ export default class GameScene extends Phaser.Scene {
       const x = Phaser.Math.Between(300, WORLD_W - 300);
       const y = Phaser.Math.Between(300, WORLD_H - 300);
       const npc = this.physics.add.image(x, y, "phys");
+      npc.renderId = ++this.nextCellId;
       npc
         .setAlpha(0)
         .setCollideWorldBounds(true)
@@ -374,6 +392,7 @@ export default class GameScene extends Phaser.Scene {
         const gy = cy + Phaser.Math.Between(-28, 28);
         const g = this.geneGroup
           .create(gx, gy, "gene_" + key)
+          .setVisible(this.worldView?.mode !== "3d")
           .setDepth(6)
           .setTint(GENES[key].color);
         g.setData("geneKey", key);
@@ -614,6 +633,7 @@ export default class GameScene extends Phaser.Scene {
       .setMaxVelocity(200)
       .setDepth(10);
     d.body.setCircle(16, -14, -14);
+    d.renderId = ++this.nextCellId;
     d.hp = 3;
     d.genes = new Set(this.activeGenes);
     d.wanderDir = axis + Math.PI;
@@ -657,19 +677,6 @@ export default class GameScene extends Phaser.Scene {
     }
   }
 
-  _updateEnvTint() {
-    const t = this.temp;
-    if (t > 42) {
-      const i = Math.min((t - 42) / 28, 1) * 0.22;
-      this.cameras.main.setBackgroundColor(Phaser.Display.Color.GetColor(Math.floor(i * 90), 0, 8));
-    } else if (t < 30) {
-      const i = Math.min((30 - t) / 20, 1) * 0.22;
-      this.cameras.main.setBackgroundColor(Phaser.Display.Color.GetColor(0, 0, Math.floor(8 + i * 90)));
-    } else {
-      this.cameras.main.setBackgroundColor(0x07071a);
-    }
-  }
-
   _createHUD() {
     this.hud = new CellHUD({
       onDivide: () => this._triggerFission(),
@@ -706,7 +713,7 @@ export default class GameScene extends Phaser.Scene {
   _setupTouch() {
     this.swimInput = new SwimInput({
       input: this.input,
-      graphics: this.add.graphics().setScrollFactor(0).setDepth(150),
+      guide: new SwimGuide(),
       canSwim: () => canControlCell(this),
       onStroke: (dx, dy) => this._swim(dx, dy),
     });
@@ -752,6 +759,7 @@ export default class GameScene extends Phaser.Scene {
           "food",
         )
         .setDepth(5)
+        .setVisible(this.worldView?.mode !== "3d")
         .setScale(0.75 + Math.random() * 0.3);
     }
   }
@@ -764,6 +772,7 @@ export default class GameScene extends Phaser.Scene {
       const g = this.geneGroup
         .create(x, y, "gene_" + key)
         .setDepth(6)
+        .setVisible(this.worldView?.mode !== "3d")
         .setTint(GENES[key].color);
       g.setData("geneKey", key);
       this.tweens.add({
@@ -782,7 +791,7 @@ export default class GameScene extends Phaser.Scene {
     this.physics.pause();
     this.hud.root.hidden = true;
     this.closeOverlay = showInstructions({
-      isMobile: window.innerWidth < 700,
+      isMobile: window.matchMedia("(pointer: coarse)").matches || window.innerWidth < 700,
       onStart: () => {
         this.showingInstructions = false;
         this.physics.resume();
@@ -792,6 +801,8 @@ export default class GameScene extends Phaser.Scene {
   }
 
   _showGameOver(reason) {
+    this.roundOver = true;
+    this.swimInput.reset();
     this.hud.root.hidden = true;
     const elapsed = Math.floor(this.elapsedMs / 1000);
     const score = getRunScore(this.elapsedMs, this.killCount);

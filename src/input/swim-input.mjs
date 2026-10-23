@@ -1,7 +1,7 @@
 export default class SwimInput {
-  constructor({ input, graphics, canSwim, onStroke }) {
+  constructor({ input, guide, canSwim, onStroke }) {
     this.input = input;
-    this.graphics = graphics;
+    this.guide = guide;
     this.gesture = null;
     this.onDown = (pointer) => {
       if (!canSwim() || this.gesture) return;
@@ -29,29 +29,11 @@ export default class SwimInput {
 
   reset() {
     this.gesture = null;
-    this.graphics.clear();
+    this.guide.clear();
   }
 
   draw() {
-    const g = this.graphics;
-    g.clear();
-    if (!this.gesture) return;
-    const { startX, startY, x, y } = this.gesture;
-    g.lineStyle(1.5, 0xffffff, 0.12);
-    g.strokeCircle(startX, startY, 28);
-    if (Math.hypot(x - startX, y - startY) <= 6) return;
-    g.lineStyle(2, 0xffd060, 0.5);
-    g.lineBetween(startX, startY, x, y);
-    const angle = Math.atan2(y - startY, x - startX);
-    g.fillStyle(0xffd060, 0.6);
-    g.fillTriangle(
-      x,
-      y,
-      x - Math.cos(angle - 0.4) * 12,
-      y - Math.sin(angle - 0.4) * 12,
-      x - Math.cos(angle + 0.4) * 12,
-      y - Math.sin(angle + 0.4) * 12,
-    );
+    this.guide.update(this.gesture);
   }
 
   destroy() {
@@ -59,6 +41,6 @@ export default class SwimInput {
     this.input.off("pointermove", this.onMove);
     this.input.off("pointerup", this.onUp);
     this.input.off("gameout", this.onOut);
-    this.graphics.destroy();
+    this.guide.destroy();
   }
 }

@@ -2,7 +2,7 @@
 
 A scientifically accurate single-cell survival game in the browser. You play as a *Bacillus* bacterium navigating a microscopic world full of nutrients, rival bacteria, and a eukaryotic predator.
 
-Built with Phaser 3. No build step or package installation required. Serve the files over HTTP.
+Built with Phaser 3 gameplay and a Three.js microscopy renderer. No build step or package installation required. Serve the files over HTTP.
 
 **Play now:** https://cellgame-eight.vercel.app
 
@@ -63,14 +63,17 @@ Collect floating DNA pickups (max 3 at once). Fission clears your genes and give
 
 ## Visual design
 
-Each cell type has a distinct full-colour ultrastructure drawn in real time as vector graphics (Phaser 3 Graphics API):
+The main world uses a fixed orthographic Three.js camera with flat gameplay movement:
 
-- **Player** — gold membrane, amber periplasm, orange nucleoid, bright inclusion granules
-- **NPCs** — four jewel palettes: cyan/teal, rose/magenta, lime/green, violet/purple
-- **Predator** — deep red with visible vacuoles, mitochondria, and nucleus/nucleolus
-- **Flagella** — three fine sinusoidal strands that animate with movement speed
+- **Player**: a gold translucent cell, coiled nucleoid and moving intracellular granules.
+- **NPCs**: teal, rose, green and violet rods, cocci, curved cells and filaments.
+- **Predator**: a coral cell with a visible nucleus, internal bodies and reaching pseudopods.
+- **Division**: the player's own 3D membrane stretches and constricts before the daughter separates.
+- **Water**: a dim fluid field, batched background organisms and soft depth particles.
 
-All cells render gram-negative ultrastructure: outer membrane, periplasmic space, inner membrane, cytoplasm, nucleoid, ribosomes (on capable screens), LPS surface fuzz.
+Mobile rendering uses capped drawing-buffer pixels, shared geometry, instanced pickups/granules, batched flagella and a single lighting pass. No shadow maps, transmission/refraction or full-screen blur are used. The native HUD and SVG swipe guide stay at screen resolution. The world stops submitting frames during pause and after a round finishes.
+
+If WebGL2 is unavailable or its context is lost, the existing 2D view takes over. Restart tries 3D again. Phone-sized browser checks have passed; physical-phone frame time and battery usage have not been measured.
 
 ---
 
@@ -88,7 +91,8 @@ Then visit `http://localhost:8080`. Phaser 3 loads from CDN. Opening `index.html
 
 ## Tech stack
 
-- [Phaser 3](https://phaser.io/) — game engine (CDN)
+- [Phaser 3](https://phaser.io/) — gameplay, Arcade physics and lightweight Canvas effects (CDN)
+- [Three.js 0.186.1](https://threejs.org/) — locally vendored 3D world renderer, MIT licensed
 - Native JavaScript modules in `src/`, with a small `game.js` entry point and `hud.css` — no build step
 - Deploys automatically to [Vercel](https://vercel.com) from this repo
 
@@ -132,3 +136,9 @@ node --test tests/*.test.mjs
 ```
 
 Food appears in patches. Nutrient collection animates into the cell, intracellular granules move, and turning eases towards the direction of travel. The native HUD stays independent of the game camera zoom.
+
+## Renderer checks
+
+Append `?stats=1` for opt-in frame-rate, draw-call, triangle and resource diagnostics. These are browser/engine observations, not a physical-phone or GPU-timer benchmark. `?renderer=2d` exercises the fallback. Both flags are development aids; the default game has no diagnostics panel.
+
+The renderer receives appearance snapshots and uses the Phaser scene clock. The 3D view does not start its own animation loop. See [architecture notes](docs/architecture.md) and [vendor provenance](vendor/README.md).

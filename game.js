@@ -2,8 +2,8 @@ import BootScene from "./src/boot-scene.mjs";
 import GameScene from "./src/game-scene.mjs";
 
 const config = {
-  type: Phaser.AUTO,
-  backgroundColor: "#07071a",
+  type: Phaser.CANVAS,
+  transparent: true,
   width: window.innerWidth,
   height: window.innerHeight,
   physics: { default: "arcade", arcade: { debug: false } },

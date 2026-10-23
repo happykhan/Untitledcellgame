@@ -30,6 +30,8 @@ function state(changes = {}) {
     killCount: 2,
     temp: 37,
     divisionCount: 0,
+    foodGroup: { getChildren: () => [] },
+    geneGroup: { getChildren: () => [] },
     fissionScale: { x: 1, y: 1 },
     ...changes,
   };

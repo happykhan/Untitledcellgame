@@ -9,7 +9,7 @@ test("a second finger cannot steal a swim gesture and leaving the canvas cancels
   let destroyed = false;
   const control = new SwimInput({
     input,
-    graphics: {
+    guide: {
       clear() {},
       destroy() {
         destroyed = true;
@@ -39,7 +39,7 @@ test("pause or division between press and release suppresses a stroke", () => {
   let strokes = 0;
   const control = new SwimInput({
     input,
-    graphics: { clear() {}, destroy() {} },
+    guide: { clear() {}, destroy() {} },
     canSwim: () => active,
     onStroke: () => strokes++,
   });
