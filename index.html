@@ -2,11 +2,11 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <title>Untitled Cell Game — survive, eat, evolve, divide</title>
 
   <!-- SEO -->
-  <meta name="description" content="A scientifically accurate single-cell survival game. Play as a bacterium: eat nutrients, collect genes, avoid the predator, divide when you're strong enough." />
+  <meta name="description" content="A simplified game about bacterial survival, adaptation and reproduction. Play as a bacterium: eat nutrients, collect genes, avoid the predator, divide when you're strong enough." />
   <meta name="keywords" content="cell game, bacteria game, microbiology game, browser game, phaser, survival game" />
   <link rel="canonical" href="https://cellgame-eight.vercel.app" />
 
@@ -25,21 +25,19 @@
   <meta name="twitter:description" content="You are a single bacterium. Eat, collect genes, avoid the predator. Divide when ready." />
   <meta name="twitter:image"       content="https://cellgame-eight.vercel.app/thumb.svg" />
 
+  <link rel="stylesheet" href="hud.css" />
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body {
       width: 100%; height: 100%;
       background: #07071a;
       overflow: hidden;
-      display: flex;
-      align-items: center;
-      justify-content: center;
     }
-    canvas { display: block; }
+    canvas { display: block; position: absolute; inset: 0; }
   </style>
 </head>
 <body>
   <script src="https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser.min.js"></script>
-  <script src="game.js"></script>
+  <script type="module" src="game.js"></script>
 </body>
 </html>
