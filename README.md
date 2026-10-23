@@ -2,7 +2,7 @@
 
 A scientifically accurate single-cell survival game in the browser. You play as a *Bacillus* bacterium navigating a microscopic world full of nutrients, rival bacteria, and a eukaryotic predator.
 
-Built with Phaser 3. No build step, no npm, no server required.
+Built with Phaser 3. No build step or package installation required. Serve the files over HTTP.
 
 **Play now:** https://cellgame-eight.vercel.app
 
@@ -76,42 +76,39 @@ All cells render gram-negative ultrastructure: outer membrane, periplasmic space
 
 ## Running locally
 
-```
-open index.html
-```
-
-Or with a local server (avoids any CORS quirks):
+The game uses native browser modules. Serve the repository over HTTP:
 
 ```
-python -m http.server 8080
+python3 -m http.server 8080
 ```
 
-Then visit `http://localhost:8080`. Phaser 3 loads from CDN; after that the game runs fully offline.
+Then visit `http://localhost:8080`. Phaser 3 loads from CDN. Opening `index.html` directly is not supported; offline startup is not implemented.
 
 ---
 
 ## Tech stack
 
 - [Phaser 3](https://phaser.io/) — game engine (CDN)
-- `index.html` + `game.js`, with native controls in `hud.js` / `hud.css` — no build step
+- Native JavaScript modules in `src/`, with a small `game.js` entry point and `hud.css` — no build step
 - Deploys automatically to [Vercel](https://vercel.com) from this repo
 
 ---
 
 ## Contributing
 
-Pull requests welcome. World simulation and cell rendering are in `game.js`; the responsive screen interface is in `hud.js` and `hud.css`. Key sections:
+Pull requests welcome. The code separates gameplay, rendering and interface ownership:
 
-| Section | What it does |
-|---------|-------------|
-| `PAL` object | Colour palettes for each cell type |
-| `drawBacteria()` | Vector gram-negative ultrastructure renderer |
-| `drawPredator()` | Eukaryote with organelles |
-| `_drawFlagellum()` | Multi-strand animated flagella |
-| `_drawBackground()` | Ghost community + grid |
-| `GameScene.create()` | World setup, physics, NPC spawning |
-| `_handleMovement()` | Keyboard + swipe-to-row input |
-| `_setupTouch()` | Mobile swipe detection |
+| Module | Responsibility |
+|--------|----------------|
+| `game.js` | Engine boot and viewport observer |
+| `src/game-scene.mjs` | Phaser simulation, actions and scene lifecycle |
+| `src/domain/game-rules.mjs` | Shared action rules, swimming speed and scoring |
+| `src/rendering/` | Cell geometry, palettes and world drawing from appearance snapshots |
+| `src/ui/` | HUD display values, DOM controls and run screens |
+| `src/input/swim-input.mjs` | Swipe ownership, cancellation and event cleanup |
+| `src/domain/score-store.mjs` | Validated local high-score persistence |
+
+The HUD receives display data and named callbacks rather than the simulation scene. Rendering receives appearance snapshots without physics bodies. See [architecture notes](docs/architecture.md) for the rendering decision and remaining integration boundaries.
 
 Ideas for contribution:
 - More pathogen types (spirochetes, vibrio, cocci clusters)
@@ -131,7 +128,7 @@ MIT
 Run the gameplay regression checks with Node.js (only needed for development):
 
 ```
-node --test tests/game.test.cjs
+node --test tests/*.test.mjs
 ```
 
 Food appears in patches. Nutrient collection animates into the cell, intracellular granules move, and turning eases towards the direction of travel. The native HUD stays independent of the game camera zoom.
