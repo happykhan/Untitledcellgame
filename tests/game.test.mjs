@@ -302,3 +302,67 @@ test("keyboard movement uses screen directions, normalises diagonals and brakes 
   for (let i = 0; i < 5; i++) s._handleMovement(50, 0.05);
   assert.ok(Math.hypot(s.player.body.velocity.x, s.player.body.velocity.y) < 3);
 });
+
+test("score entry releases captured gameplay keys and a new run restores them", () => {
+  const s = scene();
+  const previousDocument = globalThis.document;
+  const previousStorage = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
+  Object.defineProperty(globalThis, "localStorage", {
+    configurable: true,
+    value: {
+      getItem() {
+        return null;
+      },
+    },
+  });
+  const previousInput = Phaser.Input;
+  let captured = true;
+  let resets = 0;
+  s.elapsedMs = 1000;
+  s.killCount = 0;
+  s.hud.root = {};
+  s.input = {
+    keyboard: {
+      disableGlobalCapture() {
+        captured = false;
+      },
+      enableGlobalCapture() {
+        captured = true;
+      },
+      resetKeys() {
+        resets++;
+      },
+      createCursorKeys() {
+        return {};
+      },
+      addKeys() {
+        return {};
+      },
+    },
+  };
+  globalThis.document = {
+    createElement() {
+      return { style: {}, remove() {} };
+    },
+    body: {
+      appendChild() {
+        assert.equal(captured, false, "release keys before presenting the text field");
+      },
+    },
+  };
+  Phaser.Input = { Keyboard: { KeyCodes: {} } };
+  try {
+    s._showGameOver("TEST");
+    assert.equal(captured, false);
+    assert.equal(resets, 1);
+    s.closeOverlay();
+    s._setupKeyboard();
+    assert.equal(captured, true);
+  } finally {
+    s.closeOverlay?.();
+    globalThis.document = previousDocument;
+    if (previousStorage) Object.defineProperty(globalThis, "localStorage", previousStorage);
+    else delete globalThis.localStorage;
+    Phaser.Input = previousInput;
+  }
+});

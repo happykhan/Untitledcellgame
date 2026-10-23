@@ -718,6 +718,7 @@ export default class GameScene extends Phaser.Scene {
   }
 
   _setupKeyboard() {
+    this.input.keyboard.enableGlobalCapture();
     this.cursors = this.input.keyboard.createCursorKeys();
     this.wasd = this.input.keyboard.addKeys({
       up: Phaser.Input.Keyboard.KeyCodes.W,
@@ -789,6 +790,9 @@ export default class GameScene extends Phaser.Scene {
 
   _showGameOver(reason) {
     this.roundOver = true;
+    // Gameplay keys must not prevent normal typing in the native name field.
+    this.input.keyboard.disableGlobalCapture();
+    this.input.keyboard.resetKeys();
     this.swimInput.reset();
     this.hud.root.hidden = true;
     const elapsed = Math.floor(this.elapsedMs / 1000);
