@@ -184,15 +184,17 @@ function drawBacteria(g, cx, cy, angle, rx, ry, pal, alpha, phase) {
     g.fillStyle(pal.ribo, 0.45 * a);
     for (let i = 0; i < 10; i++) {
       const t = (i / 10) * Math.PI * 2;
-      const lx = Math.cos(t) * rx * 0.52, ly = Math.sin(t) * ry * 0.50;
+      const lx = Math.cos(t + phase * 0.06) * rx * 0.48, ly = Math.sin(t + phase * 0.04) * ry * 0.50;
       g.fillCircle(cx + lx*cos - ly*sin, cy + lx*sin + ly*cos, 1.1);
     }
   }
 
   // Inclusion granules — soft glow, no hard outline
   pal.gran.forEach(function(gr) {
-    const wx = cx + (gr[0] * rx) * cos - (gr[1] * ry) * sin;
-    const wy = cy + (gr[0] * rx) * sin + (gr[1] * ry) * cos;
+    const lx = gr[0] * rx + Math.sin(phase * 0.13 + gr[2]) * rx * 0.12;
+    const ly = gr[1] * ry + Math.cos(phase * 0.09 + gr[2]) * ry * 0.06;
+    const wx = cx + lx * cos - ly * sin;
+    const wy = cy + lx * sin + ly * cos;
     g.fillStyle(gr[3], 0.35 * a); g.fillCircle(wx, wy, gr[2] * 1.8);
     g.fillStyle(gr[3], 0.75 * a); g.fillCircle(wx, wy, gr[2] * 0.8);
   });
@@ -208,6 +210,37 @@ function drawBacteria(g, cx, cy, angle, rx, ry, pal, alpha, phase) {
   // Crisp inner edge of membrane (double-membrane suggestion)
   g.lineStyle(0.6, pal.og, 0.4 * a);
   capsulePathWobble(g, cx, cy, rx * 0.93, ry * 0.93, cos, sin, phase + 0.3, 0.4); g.strokePath();
+}
+
+// Division keeps a continuous membrane until the final pinch closes.
+function drawDividingCell(g, cx, cy, angle, scale, progress, pal) {
+  const rx = 9 * scale, ry = (62 + 28 * progress) * scale;
+  const cos = Math.cos(angle), sin = Math.sin(angle);
+  const path = (inset = 1) => {
+    g.beginPath();
+    for (let side = 0; side < 2; side++) {
+      for (let i = 0; i <= 64; i++) {
+        const y = (-ry + 2 * ry * i / 64) * (side ? -1 : 1);
+        const cap = Math.max(0, Math.abs(y) - (ry - rx));
+        const width = Math.sqrt(Math.max(0, rx * rx - cap * cap));
+        const pinch = 1 - 0.98 * progress * Math.exp(-Math.pow(y / (16 * scale), 2));
+        const x = width * pinch * inset * (side ? -1 : 1);
+        const wx = cx + x * cos - y * sin, wy = cy + x * sin + y * cos;
+        if (!side && !i) g.moveTo(wx, wy); else g.lineTo(wx, wy);
+      }
+    }
+    g.closePath();
+  };
+  g.fillStyle(pal.cyto, 0.95); path(); g.fillPath();
+  g.lineStyle(7 * scale, pal.outer, 0.08); path(); g.strokePath();
+  g.lineStyle(1.8, pal.outer, 0.95); path(); g.strokePath();
+  g.lineStyle(0.8, pal.inner, 0.65); path(0.70); g.strokePath();
+  for (const direction of [-1, 1]) {
+    const offset = direction * (10 + 33 * progress) * scale;
+    const x = cx - Math.sin(angle) * offset, y = cy + Math.cos(angle) * offset;
+    g.fillStyle(pal.nuc, 0.5);
+    fillEllipse(g, x, y, rx * 0.48, 12 * scale, cos, sin);
+  }
 }
 
 // Coccus — spherical bacterium (Staphylococcus, Streptococcus style)
@@ -416,7 +449,7 @@ class GameScene extends Phaser.Scene {
 
     this.player = this.physics.add.image(WORLD_W / 2, WORLD_H / 2, 'phys');
     this.player.setAlpha(0).setCollideWorldBounds(true).setBounce(1, 1)
-               .setDamping(true).setDrag(0.90).setMaxVelocity(340).setDepth(10);
+               .setDamping(true).setDrag(0.32).setMaxVelocity(340).setDepth(10);
     this.player.body.setCircle(16, -14, -14);
 
     this.entityGfx    = this.add.graphics().setDepth(9);
@@ -440,6 +473,15 @@ class GameScene extends Phaser.Scene {
 
     this.cameras.main.startFollow(this.player, true, 0.08, 0.08);
     this.cameras.main.setZoom(ZOOM);
+    const resize = gameSize => {
+      const minDim = Math.min(gameSize.width, gameSize.height);
+      this.cameras.main.setSize(gameSize.width, gameSize.height);
+      this.cameras.main.setZoom(Math.max(0.42, Math.min(0.78, minDim / 550)));
+      this.cameras.main.centerOn(this.player.x, this.player.y);
+      if (this.swipe) this.swipe.active = false;
+    };
+    this.scale.on('resize', resize);
+    this.events.once('shutdown', () => this.scale.off('resize', resize));
 
     this._createHUD();
     this._setupKeyboard();
@@ -478,6 +520,9 @@ class GameScene extends Phaser.Scene {
     this.touchBact     = false;
     this.touchConj     = false;
     this.fissionScale  = { x: 1, y: 1 };
+    this.fissionProgress = 0;
+    this.feedGlow = 0;
+    this.divisionCount = 0;
     this.showingInstructions = false;
     this.time.delayedCall(120, () => this._showInstructions());
 
@@ -494,7 +539,7 @@ class GameScene extends Phaser.Scene {
   update(time, delta) {
     if (this.showingInstructions) return;
     if (!this.alive || this.dying) return;
-    const dt = delta / 1000;
+    const dt = Math.min(delta, 50) / 1000;
 
     if (!this.fissioning) {
       this._updateTemp(dt);
@@ -506,6 +551,7 @@ class GameScene extends Phaser.Scene {
     this.flagGfx.clear();
     this.organelleGfx.clear();
 
+    this.feedGlow = Math.max(0, this.feedGlow - dt * 2);
     this._drawAllCells();
     this._updatePredator(delta);
     this._updateDaughters(delta);
@@ -517,10 +563,9 @@ class GameScene extends Phaser.Scene {
 
     if (this.bacterioTimer > 0) this.bacterioTimer -= delta;
 
-    // Tick score (1 pt/sec + energy bonus)
+    // Match the high-score screen: survival time and kills.
     this.score = Math.floor((this.time.now - this.startTime) / 1000) * 10
-               + this.killCount * 100
-               + Math.floor(this.energy);
+               + this.killCount * 100;
 
     // Update ocean current direction
     this.current.changeTimer += delta;
@@ -556,14 +601,23 @@ class GameScene extends Phaser.Scene {
     const pal = this._getPlayerPalette();
     const pa = this.playerAlpha;
 
-    const rx = 9 * CELL_S * this.fissionScale.x;
-    const ry = 62 * CELL_S * this.fissionScale.y;
+    const stretch = 1 + this.flagSpeed * 0.04;
+    const rx = 9 * CELL_S * this.fissionScale.x / stretch;
+    const ry = 62 * CELL_S * this.fissionScale.y * stretch;
     const angle = this.player.rotation;
 
-    drawBacteria(g, this.player.x, this.player.y, angle, rx, ry, pal, pa, this.flagPhase);
+    if (this.fissioning) {
+      drawDividingCell(g, this.player.x, this.player.y, angle, CELL_S, this.fissionProgress, pal);
+    } else {
+      drawBacteria(g, this.player.x, this.player.y, angle, rx, ry, pal, pa, this.flagPhase);
+      if (this.feedGlow > 0) {
+        g.fillStyle(0xffcf75, this.feedGlow * 0.24);
+        fillCapsule(g, this.player.x, this.player.y, rx * 0.72, ry * 0.75, Math.cos(angle), Math.sin(angle));
+      }
+    }
     this._drawOrganelles(og, this.player.x, this.player.y, angle, pal.outer, pa, CELL_S);
 
-    this.flagPhase += 0.12 + this.flagSpeed * 0.18;
+    this.flagPhase += (0.12 + this.flagSpeed * 0.18) * Math.min(this.game.loop.delta, 50) / 16.667;
     const pRear = 64 * CELL_S;
     this._drawFlagellum(fg, this.player.x, this.player.y, angle, this.flagPhase, pal, pa, pRear);
     if (this.activeGenes.has('FLAGELLUM')) {
@@ -771,22 +825,33 @@ class GameScene extends Phaser.Scene {
       this.flagSpeed = 0.5;
     } else {
       this.player.body.setAcceleration(0, 0);
-      this.flagSpeed = Math.max(0, this.flagSpeed - 0.03);
+      this.flagSpeed = Math.max(0, this.flagSpeed - dt * 1.8);
     }
 
     // Cell visual rotation always follows actual velocity (inertia)
     const vx = this.player.body.velocity.x, vy = this.player.body.velocity.y;
     if (Math.hypot(vx, vy) > 18) {
-      this.player.rotation = Math.atan2(vy, vx) + Math.PI / 2;
+      const target = Math.atan2(vy, vx) + Math.PI / 2;
+      this.player.rotation = Phaser.Math.Angle.RotateTo(this.player.rotation, target, dt * 7);
     }
   }
 
   // ── Food + Gene ───────────────────────────────────────────
   _eatFood(player, food) {
+    if (!food.active || this.fissioning || this.dying || !this.alive) return;
+    const particle = this.add.image(food.x, food.y, 'food').setDepth(19);
+    const origin = { x: food.x, y: food.y, progress: 0 };
     food.destroy();
     this.energy = Math.min(200, this.energy + 22);
-    this.playerAlpha = 1.4;
-    this.time.delayedCall(80, () => { this.playerAlpha = 1.0; });
+    this.feedGlow = 1;
+    this.tweens.add({
+      targets: origin, progress: 1, duration: 260, ease: 'Cubic.easeIn',
+      onUpdate: () => {
+        particle.setPosition(Phaser.Math.Linear(origin.x, player.x, origin.progress), Phaser.Math.Linear(origin.y, player.y, origin.progress));
+        particle.setScale(1 - origin.progress * 0.85).setAlpha(1 - origin.progress * 0.5);
+      },
+      onComplete: () => particle.destroy(),
+    });
   }
 
   _collectGene(player, pick) {
@@ -798,6 +863,7 @@ class GameScene extends Phaser.Scene {
     }
     pick.destroy();
     this.activeGenes.add(key);
+    this.hud.notify('Adaptation acquired: ' + GENES[key].desc);
     this._updateGeneHUD();
     if (this.dyingPulse && this.energy > 30) { this.dyingPulse = false; this.playerAlpha = 1.0; }
     const gc = GENES[key].color;
@@ -875,8 +941,8 @@ class GameScene extends Phaser.Scene {
     this.energy -= 30; this.bacterioTimer = 5000;
     const range = this.activeGenes.has('TOXIN') ? 210 : 140;
     const px = this.player.x, py = this.player.y;
-    const ring = this.add.graphics().setDepth(18);
-    ring.lineStyle(3, 0xff44aa, 1.0); ring.strokeCircle(px, py, 10);
+    const ring = this.add.graphics().setDepth(18).setPosition(px, py);
+    ring.lineStyle(3, 0xff44aa, 1.0); ring.strokeCircle(0, 0, 10);
     this.tweens.add({ targets: ring, scaleX: range/10, scaleY: range/10, alpha: 0, duration: 440, ease: 'Power2', onComplete: () => ring.destroy() });
     [...this.npcCells, ...this.daughters].forEach(c => {
       if (c.active && Phaser.Math.Distance.Between(px, py, c.x, c.y) < range) this._killCell(c);
@@ -1019,28 +1085,30 @@ class GameScene extends Phaser.Scene {
   }
 
   _triggerFission() {
-    if (this.fissioning) return;
+    if (this.fissioning || !this.alive || this.dying || this.energy <= 150) return;
     this.fissioning = true;
-    this.fissionScale = { x: 1, y: 1 };
-    let tick = 0;
-    const anim = this.time.addEvent({
-      delay: 30, repeat: 12,
-      callback: () => {
-        tick++;
-        this.fissionScale.x = 1 - tick * 0.03;
-        this.fissionScale.y = 1 + tick * 0.04;
-        if (tick >= 12) { anim.remove(); this._completeFission(); }
-      }
+    this.fissionProgress = 0;
+    this.conjTarget = null;
+    this.fxGfx.clear();
+    this.player.body.setVelocity(0, 0).setAcceleration(0, 0);
+    this.tweens.add({
+      targets: this, fissionProgress: 1, duration: 1200, ease: 'Sine.easeInOut',
+      onComplete: () => this._completeFission(),
     });
   }
 
   _completeFission() {
-    const dx = Phaser.Math.Between(-55, 55), dy = Phaser.Math.Between(-55, 55);
-    const d  = this.physics.add.image(this.player.x + dx, this.player.y + dy, 'phys');
+    const axis = this.player.rotation - Math.PI / 2;
+    const dx = -Math.cos(axis) * 46 * CELL_S, dy = -Math.sin(axis) * 46 * CELL_S;
+    this.player.setPosition(
+      Phaser.Math.Clamp(this.player.x - dx, 20, WORLD_W - 20),
+      Phaser.Math.Clamp(this.player.y - dy, 20, WORLD_H - 20)
+    );
+    const d = this.physics.add.image(Phaser.Math.Clamp(this.player.x + dx * 2, 20, WORLD_W - 20), Phaser.Math.Clamp(this.player.y + dy * 2, 20, WORLD_H - 20), 'phys');
     d.setAlpha(0).setCollideWorldBounds(true).setBounce(1, 1).setDamping(true).setDrag(0.93).setMaxVelocity(200).setDepth(10);
     d.body.setCircle(16, -14, -14);
     d.hp = 3; d.genes = new Set(this.activeGenes);
-    d.wanderDir = Math.random() * Math.PI * 2; d.wanderTimer = 0; d.flagPhase = 0; d.angle = 0;
+    d.wanderDir = axis + Math.PI; d.wanderTimer = 1000; d.flagPhase = 0; d.angle = Phaser.Math.RadToDeg(this.player.rotation);
     this.daughters.push(d);
 
     const a = Math.atan2(dy, dx);
@@ -1048,8 +1116,11 @@ class GameScene extends Phaser.Scene {
     this.player.body.setVelocity(-Math.cos(a) * 80, -Math.sin(a) * 80);
     this.physics.add.overlap(this.player, d, () => this._collideNPC(d), null, this);
 
-    this.player.angle = 0;
-    this.fissionScale = { x: 1, y: 1 };
+    this.divisionCount++;
+    this.hud.notify('Division complete · daughter released');
+    this.feedGlow = 1;
+    this.fissionScale = { x: 1, y: 0.75 };
+    this.tweens.add({ targets: this.fissionScale, y: 1, duration: 450, ease: 'Sine.easeOut' });
     this.energy       = 80;
     this.activeGenes  = new Set();
     this.dyingPulse   = false;
@@ -1090,211 +1161,42 @@ class GameScene extends Phaser.Scene {
 
   // ── HUD ───────────────────────────────────────────────────
   _createHUD() {
-    const w = this.cameras.main.width, h = this.cameras.main.height;
-    this.hudCon = this.add.container(0, 0).setScrollFactor(0).setDepth(100);
-
-    this.energyBarBg = this.add.graphics();
-    this.energyBarBg.fillStyle(0x111122, 0.5); this.energyBarBg.fillRect(0, 0, w, 6);
-    this.hudCon.add(this.energyBarBg);
-
-    this.energyBar = this.add.graphics();
-    this.hudCon.add(this.energyBar);
-
-    this.tempText = this.add.text(w - 10, 10, '37°C', {
-      fontSize: '12px', fill: '#33cc66', fontFamily: 'monospace'
-    }).setOrigin(1, 0);
-    this.hudCon.add(this.tempText);
-
-    this.scoreText = this.add.text(10, 10, '0', {
-      fontSize: '14px', fill: '#ffd060', fontFamily: 'monospace', fontStyle: 'bold'
-    });
-    this.hudCon.add(this.scoreText);
-
-    // Current arrow — compass indicator bottom-left above action buttons
-    this.currentArrowGfx = this.add.graphics().setScrollFactor(0).setDepth(101);
-    this.hudCon.add(this.currentArrowGfx);
-
-    this.geneSlots = [];
-    for (let i = 0; i < 3; i++) {
-      const sx = w/2 - 44 + i * 44, sy = h - 38;
-      const bg = this.add.graphics();
-      bg.lineStyle(1, 0x224433, 0.7); bg.strokeRect(sx-16, sy-16, 32, 32);
-      this.hudCon.add(bg);
-      const lbl = this.add.text(sx, sy, '', {
-        fontSize: '14px', fill: '#aaffaa', fontFamily: 'monospace'
-      }).setOrigin(0.5, 0.5);
-      this.hudCon.add(lbl);
-      this.geneSlots.push({ bg, lbl, sx, sy });
-    }
-
-    this.fissText = this.add.text(w/2, h - 72, 'F  DIVIDE', {
-      fontSize: '13px', fill: '#ffd060', fontFamily: 'monospace', fontStyle: 'bold'
-    }).setOrigin(0.5).setAlpha(0);
-    this.hudCon.add(this.fissText);
-
-    this.bactText = this.add.text(10, h - 18, '', {
-      fontSize: '9px', fill: '#ff88aa', fontFamily: 'monospace'
-    });
-    this.hudCon.add(this.bactText);
-
-    this.conjHint = this.add.text(w - 10, h - 18, '', {
-      fontSize: '9px', fill: '#ffff88', fontFamily: 'monospace', align: 'right'
-    }).setOrigin(1, 0);
-    this.hudCon.add(this.conjHint);
-
-    this._buildActionButtons(w, h);
-  }
-
-  _buildActionButtons(w, h) {
-    // DIVIDE — large prominent pill button at bottom right
-    const divGfx = this.add.graphics().setScrollFactor(0).setDepth(199);
-    this.divGfx = divGfx;
-    this.hudCon.add(divGfx);
-    const divBtn = this.add.text(w - 46, h - 52, '÷ DIVIDE', {
-      fontSize: '15px', fill: '#ffd060', fontFamily: 'monospace', fontStyle: 'bold'
-    }).setScrollFactor(0).setDepth(200).setOrigin(0.5).setAlpha(0.35).setInteractive({ useHandCursor: false });
-    divBtn.on('pointerdown', () => { this.touchFission = true;  divBtn.setAlpha(1.0); });
-    divBtn.on('pointerup',   () => { this.touchFission = false; divBtn.setAlpha(0.35); });
-    divBtn.on('pointerout',  () => { this.touchFission = false; divBtn.setAlpha(0.35); });
-    this.hudCon.add(divBtn);
-    this.divBtn = divBtn;
-
-    // Secondary action buttons — right edge
-    const btns = [
-      { label: 'B', y: h-110, key: 'touchBact', color: 0xff88aa },
-      { label: 'C', y: h-60,  key: 'touchConj', color: 0xffff88 },
-    ];
-    btns.forEach(b => {
-      const hexStr = '#' + b.color.toString(16).padStart(6, '0');
-      const btn = this.add.text(w - 20, b.y, b.label, {
-        fontSize: '13px', fill: hexStr, fontFamily: 'monospace'
-      }).setScrollFactor(0).setDepth(200).setOrigin(0.5).setAlpha(0.3).setInteractive({ useHandCursor: false });
-      const circ = this.add.graphics().setScrollFactor(0).setDepth(199);
-      circ.lineStyle(1, b.color, 0.3); circ.strokeCircle(w - 20, b.y, 16);
-      this.hudCon.add(circ);
-      btn.on('pointerdown', () => { this[b.key] = true;  btn.setAlpha(1.0); });
-      btn.on('pointerup',   () => { this[b.key] = false; btn.setAlpha(0.3); });
-      btn.on('pointerout',  () => { this[b.key] = false; btn.setAlpha(0.3); });
-      this.hudCon.add(btn);
-    });
-
-    // Tumble — bottom-left
-    const tcirc = this.add.graphics().setScrollFactor(0).setDepth(199);
-    tcirc.lineStyle(1, 0xaabbcc, 0.3); tcirc.strokeCircle(28, h-60, 16);
-    this.hudCon.add(tcirc);
-
-    const tumbleBtn = this.add.text(28, h-60, '↺', {
-      fontSize: '18px', fill: '#aabbcc', fontFamily: 'sans-serif'
-    }).setScrollFactor(0).setDepth(200).setOrigin(0.5).setAlpha(0.3).setInteractive();
-    tumbleBtn.on('pointerdown', () => {
-      tumbleBtn.setAlpha(1.0);
-      if (!this.tumbling) {
-        this.tumbling    = true; this.tumbleTimer = 400;
-        this.tumbleAngle = (Math.random() < 0.5 ? -1 : 1) * (90 + Math.random() * 180);
-        this.player.body.setAcceleration(0, 0);
-      }
-    });
-    tumbleBtn.on('pointerup',  () => tumbleBtn.setAlpha(0.3));
-    tumbleBtn.on('pointerout', () => tumbleBtn.setAlpha(0.3));
-    this.hudCon.add(tumbleBtn);
+    this.hud = new CellHUD(this);
+    this.events.once('shutdown', () => this.hud.destroy());
   }
 
   _updateHUD(time) {
-    const w = this.cameras.main.width, h = this.cameras.main.height;
-    const pct   = Math.min(this.energy / 200, 1);
-    const color = this.energy > 150 ? 0xffd060 : this.energy > 50 ? 0xff8800 : 0xff4444;
-    this.energyBar.clear();
-    this.energyBar.fillStyle(color, 0.85);
-    this.energyBar.fillRect(0, 0, Math.floor(w * pct), 6);
-
-    const tc = this.temp > 50 ? '#ff5522' : this.temp < 25 ? '#55aaff' : '#33cc66';
-    this.tempText.setText(`${Math.round(this.temp)}°C`).setStyle({ fill: tc });
-
-    const sec = Math.floor((time - this.startTime) / 1000);
-    this.scoreText.setText(`${this.score}  ${this.killCount > 0 ? this.killCount + '✕' : ''}`);
-
-    // Divide button — pulse gold when ready, dim when not
-    const canDiv = this.energy > 150 && !this.fissioning;
-    const divAlpha = canDiv ? (0.55 + Math.sin(time * 0.007) * 0.45) : 0.22;
-    this.divBtn.setAlpha(divAlpha);
-    this.divGfx.clear();
-    this.divGfx.lineStyle(1.5, canDiv ? 0xffd060 : 0x554422, canDiv ? divAlpha : 0.2);
-    const w2 = this.cameras.main.width;
-    this.divGfx.strokeRoundedRect(w2 - 102, h - 68, 112, 32, 8);
-    // Desktop hint
-    this.fissText.setAlpha(canDiv ? 0.5 : 0);
-
-    this.bactText.setText(this.bacterioTimer > 0 ? `B ${Math.ceil(this.bacterioTimer/1000)}s` : 'B ready');
-
-    const allFriendly = [...this.daughters, ...this.npcCells];
-    const near = allFriendly.some(c => c.active && Phaser.Math.Distance.Between(this.player.x, this.player.y, c.x, c.y) < 140);
-    this.conjHint.setText(this.conjTarget ? 'conjugating...' : near ? 'C conjugate' : '');
-
-    // Current direction arrow — small compass bottom-left
-    this._drawCurrentArrow(h);
-
-    this._updateGeneHUD();
-  }
-
-  _drawCurrentArrow(h) {
-    const g = this.currentArrowGfx;
-    g.clear();
-    const cx = 28, cy = h - 185;
-    const a  = this.current.angle;
-    const r  = 14;
-    // Background ring
-    g.lineStyle(1, 0x334455, 0.5);
-    g.strokeCircle(cx, cy, r);
-    // Arrow
-    g.lineStyle(1.5, 0x88bbdd, 0.7);
-    g.lineBetween(cx - Math.cos(a)*r*0.6, cy - Math.sin(a)*r*0.6, cx + Math.cos(a)*r*0.85, cy + Math.sin(a)*r*0.85);
-    const aw = 0.45;
-    g.fillStyle(0x88bbdd, 0.7);
-    g.fillTriangle(
-      cx + Math.cos(a)*r, cy + Math.sin(a)*r,
-      cx + Math.cos(a + Math.PI - aw)*r*0.45, cy + Math.sin(a + Math.PI - aw)*r*0.45,
-      cx + Math.cos(a + Math.PI + aw)*r*0.45, cy + Math.sin(a + Math.PI + aw)*r*0.45
-    );
+    this.hud.update(time);
   }
 
   _updateGeneHUD() {
-    const gArr = Array.from(this.activeGenes);
-    this.geneSlots.forEach((slot, i) => {
-      const key = gArr[i];
-      slot.lbl.setText(key ? GENES[key].symbol : '');
-      slot.bg.clear();
-      const col = key ? GENES[key].color : 0x224433;
-      slot.bg.lineStyle(1, col, key ? 0.85 : 0.25);
-      slot.bg.strokeRect(slot.sx - 16, slot.sy - 16, 32, 32);
-      if (key) { slot.bg.fillStyle(col, 0.1); slot.bg.fillRect(slot.sx-16, slot.sy-16, 32, 32); }
-      if (key) slot.lbl.setStyle({ fill: '#' + col.toString(16).padStart(6, '0') });
-      else     slot.lbl.setStyle({ fill: '#aaffaa' });
-    });
+    this.hud.updateGenes();
   }
 
   // ── Touch — swipe-to-row ──────────────────────────────────
-  // Each swipe on the left ~2/3 of screen propels the cell in
+  // Each swipe in the open water propels the cell in
   // the swipe direction (rowing). Repeated short strokes = swimming.
   _setupTouch() {
     this.swipe = { active: false, startX: 0, startY: 0, curX: 0, curY: 0 };
     this.swipeGfx = this.add.graphics().setScrollFactor(0).setDepth(150);
     // Keep joystick stub so _handleMovement reference doesn't break
     this.joystick = { active: false, dx: 0, dy: 0 };
-    const RZ = this.cameras.main.width - 80;
+
 
     this.input.on('pointerdown', (p) => {
-      if (p.x < RZ) {
+      if (p.x < this.cameras.main.width - 100 && !this.showingInstructions) {
         this.swipe.active = true;
+        this.swipe.pointerId = p.id;
         this.swipe.startX = p.x; this.swipe.startY = p.y;
         this.swipe.curX   = p.x; this.swipe.curY   = p.y;
       }
     });
     this.input.on('pointermove', (p) => {
-      if (!this.swipe.active) return;
+      if (!this.swipe.active || p.id !== this.swipe.pointerId) return;
       this.swipe.curX = p.x; this.swipe.curY = p.y;
     });
     this.input.on('pointerup', (p) => {
-      if (!this.swipe.active) return;
+      if (!this.swipe.active || p.id !== this.swipe.pointerId) return;
       this.swipe.active = false;
       const dx   = p.x - this.swipe.startX;
       const dy   = p.y - this.swipe.startY;
@@ -1358,7 +1260,7 @@ class GameScene extends Phaser.Scene {
     g.fillRect(0, 0, WORLD_W, WORLD_H);
 
     // Very faint hex-grid overlay (suggests microscope slide)
-    g.lineStyle(0.5, 0x1a1a3a, 0.35);
+    g.lineStyle(0.5, 0x1a1a3a, 0.10);
     const gs = 120;
     for (let x = 0; x < WORLD_W; x += gs) { g.lineBetween(x, 0, x, WORLD_H); }
     for (let y = 0; y < WORLD_H; y += gs) { g.lineBetween(0, y, WORLD_W, y); }
@@ -1405,11 +1307,16 @@ class GameScene extends Phaser.Scene {
   // ── Spawning ──────────────────────────────────────────────
   _spawnFood(n) {
     for (let i = 0; i < n; i++) {
+      if (i % 12 === 0) {
+        this.foodPatch = i === 0 && !this.player
+          ? { x: WORLD_W / 2 + 110, y: WORLD_H / 2 - 170 }
+          : { x: Phaser.Math.Between(150, WORLD_W - 150), y: Phaser.Math.Between(150, WORLD_H - 150) };
+      }
+      const angle = Math.random() * Math.PI * 2, radius = Math.sqrt(Math.random()) * 150;
       this.foodGroup.create(
-        Phaser.Math.Between(50, WORLD_W-50),
-        Phaser.Math.Between(50, WORLD_H-50),
-        'food'
-      ).setDepth(5);
+        Phaser.Math.Clamp(this.foodPatch.x + Math.cos(angle) * radius, 40, WORLD_W - 40),
+        Phaser.Math.Clamp(this.foodPatch.y + Math.sin(angle) * radius, 40, WORLD_H - 40), 'food'
+      ).setDepth(5).setScale(0.75 + Math.random() * 0.3);
     }
   }
 
@@ -1427,58 +1334,45 @@ class GameScene extends Phaser.Scene {
   // (Phaser text is blurry when camera zoom < 1; DOM bypasses that)
   _showInstructions() {
     this.showingInstructions = true;
+    this.physics.pause();
+    this.hud.root.hidden = true;
     const isMobile = window.innerWidth < 700;
 
     const div = document.createElement('div');
     div.id = 'cell-intro';
-    div.style.cssText = [
-      'position:fixed','top:0','left:0','width:100%','height:100%',
-      'display:flex','align-items:center','justify-content:center',
-      'background:rgba(7,7,26,0.93)','z-index:999',
-      'font-family:monospace,Courier New','cursor:pointer',
-    ].join(';');
-
-    const move = isMobile
-      ? 'Swipe left side of screen to swim'
-      : 'W/↑ thrust &nbsp;·&nbsp; A/D steer &nbsp;·&nbsp; Space tumble';
-    const div2 = isMobile
-      ? '<b style="color:#88ffcc">÷ DIVIDE</b> button &nbsp;(need 150% energy)'
-      : '<b style="color:#88ffcc">F</b> to divide &nbsp;(need 150% energy)';
-    const bact = isMobile
-      ? '<b style="color:#ff88aa">B</b> antimicrobial &nbsp;·&nbsp; <b style="color:#ffff88">C</b> gene steal'
-      : '<b style="color:#ff88aa">B</b> antimicrobial burst &nbsp;·&nbsp; <b style="color:#ffff88">C</b> conjugate';
-
+    div.className = 'cell-intro';
+    div.setAttribute('role', 'dialog');
+    div.setAttribute('aria-modal', 'true');
+    div.setAttribute('aria-labelledby', 'intro-title');
     div.innerHTML = `
-      <div style="
-        border:1.5px solid rgba(255,208,96,0.5);
-        border-radius:10px;
-        background:rgba(10,10,30,0.97);
-        padding:28px 32px;
-        max-width:340px;
-        width:calc(100% - 48px);
-        text-align:center;
-        line-height:1.7;
-      ">
-        <div style="font-size:20px;font-weight:bold;color:#ffd060;letter-spacing:2px;margin-bottom:12px">SURVIVE</div>
-        <div style="font-size:12px;color:#aaccbb;margin-bottom:4px">${move}</div>
-        <div style="font-size:11px;color:#556677;margin-bottom:12px">Cell faces direction of movement</div>
-        <div style="font-size:12px;color:#ff9933;margin-bottom:3px">Eat orange ● food to gain energy</div>
-        <div style="font-size:12px;color:#ffd060;margin-bottom:3px">Collect ◆ gene pickups (max 3)</div>
-        <div style="font-size:12px;color:#ff5555;margin-bottom:12px">Avoid the large red predator</div>
-        <div style="font-size:12px;color:#aaccbb;margin-bottom:3px">${div2}</div>
-        <div style="font-size:11px;color:#aaaaff;margin-bottom:18px">${bact}</div>
-        <div style="font-size:13px;color:#ffd060;opacity:0.75">tap anywhere to begin</div>
+      <div class="intro-content">
+        <h1 id="intro-title">Survive</h1>
+        <p class="intro-lead">One cell. A whole world to navigate.</p>
+        <ol class="intro-steps">
+          <li><strong>Feed</strong><span>Swim through orange nutrients to restore energy.</span></li>
+          <li><strong>Adapt</strong><span>Collect DNA diamonds. Carry up to three adaptations.</span></li>
+          <li><strong>Divide</strong><span>Build over 150 energy, then release a daughter carrying your adaptations.</span></li>
+        </ol>
+        <p class="intro-danger">Keep clear of the large red predator.</p>
+        <p class="intro-controls">${isMobile ? 'Swipe the water to swim. Use the buttons to tumble, burst or conjugate.' : 'W / ↑ swim · A / D steer · Space tumble<br>F divide · B burst · C conjugate'}</p>
+        <button class="intro-start">Start swimming</button>
       </div>`;
 
     document.body.appendChild(div);
+    this.events.once('shutdown', () => { div.remove(); document.removeEventListener('keydown', dismiss); });
 
     const dismiss = () => {
       if (!document.body.contains(div)) return;
       document.body.removeChild(div);
       this.showingInstructions = false;
+      this.physics.resume();
+      this.startTime = this.time.now;
+      this.hud.root.hidden = false;
+      document.removeEventListener('keydown', dismiss);
     };
     this.time.delayedCall(300, () => {
-      div.addEventListener('click', dismiss);
+      div.querySelector('button').addEventListener('click', dismiss);
+      div.querySelector('button').focus();
       document.addEventListener('keydown', dismiss, { once: true });
     });
   }
@@ -1486,19 +1380,24 @@ class GameScene extends Phaser.Scene {
   // ── Game over ─────────────────────────────────────────────
   _showGameOver(reason) {
     const elapsed = Math.floor((this.time.now - this.startTime) / 1000);
-    const score   = elapsed * 10 + this.killCount * 25;
+    const score   = elapsed * 10 + this.killCount * 100;
+    this.hud.root.hidden = true;
 
     const LS_KEY  = 'ucg_scores';
     let scores    = [];
-    try { scores = JSON.parse(localStorage.getItem(LS_KEY) || '[]'); } catch(e) {}
-    const lastName = localStorage.getItem('ucg_last_name') || '';
+    let lastName = '';
+    try {
+      const stored = JSON.parse(localStorage.getItem(LS_KEY) || '[]');
+      if (Array.isArray(stored)) scores = stored.filter(s => s && Number.isFinite(s.score));
+      lastName = localStorage.getItem('ucg_last_name') || '';
+    } catch(e) {}
 
     const top5 = [...scores].sort((a, b) => b.score - a.score).slice(0, 5);
     const lbRows = top5.length
       ? top5.map((s, i) => `
           <div style="display:flex;justify-content:space-between;gap:16px;
             color:${i === 0 ? '#ffd060' : '#aaccbb'};font-size:13px;padding:3px 0;border-bottom:1px solid #1a1a2a">
-            <span>${i + 1}. ${s.name || 'ANON'}</span>
+            <span>${i + 1}. ${CellHUD.escape(s.name || 'ANON')}</span>
             <span>${s.score}pts &nbsp; ${s.elapsed}s &nbsp; ${s.kills}k</span>
           </div>`).join('')
       : '<div style="color:#445566;font-size:12px;padding:6px 0">no scores yet</div>';
@@ -1518,7 +1417,7 @@ class GameScene extends Phaser.Scene {
         <div style="font-size:26px;font-weight:bold;color:#ffd060;margin-bottom:18px">${score} pts</div>
 
         <input id="ucg-name" type="text" maxlength="16" placeholder="your name"
-          value="${lastName.replace(/"/g, '')}"
+          value="${CellHUD.escape(lastName)}"
           style="width:100%;box-sizing:border-box;background:#0a0a20;
             border:1px solid rgba(255,208,96,0.35);border-radius:6px;
             color:#ffd060;font-family:monospace,Courier New;font-size:16px;
@@ -1537,11 +1436,11 @@ class GameScene extends Phaser.Scene {
 
     const submit = () => {
       const name = (document.getElementById('ucg-name')?.value || '').trim() || 'ANON';
-      localStorage.setItem('ucg_last_name', name);
+      try { localStorage.setItem('ucg_last_name', name); } catch(e) {}
       scores.push({ name, score, elapsed, kills: this.killCount, date: Date.now() });
       scores.sort((a, b) => b.score - a.score);
       scores.splice(20);
-      localStorage.setItem(LS_KEY, JSON.stringify(scores));
+      try { localStorage.setItem(LS_KEY, JSON.stringify(scores)); } catch(e) {}
       if (document.body.contains(div)) document.body.removeChild(div);
       this.scene.restart();
     };
@@ -1566,8 +1465,15 @@ const config = {
   height: window.innerHeight,
   physics: { default: 'arcade', arcade: { debug: false } },
   scene:   [BootScene, GameScene],
-  scale: { mode: Phaser.Scale.RESIZE, autoCenter: Phaser.Scale.CENTER_BOTH, parent: document.body },
+  scale: { mode: Phaser.Scale.NONE, autoCenter: Phaser.Scale.NO_CENTER, parent: document.body },
 };
 
 const game = new Phaser.Game(config);
-window.addEventListener('resize', () => game.scale.resize(window.innerWidth, window.innerHeight));
+// Observe layout as well as window events (orientation and embedded view changes).
+const resizeGame = () => {
+  if (game.isBooted) game.scale.resize(window.innerWidth, window.innerHeight);
+};
+const viewportObserver = new ResizeObserver(resizeGame);
+viewportObserver.observe(document.documentElement);
+game.events.once('ready', resizeGame);
+game.events.once('destroy', () => viewportObserver.disconnect());

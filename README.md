@@ -15,7 +15,7 @@ Survive as long as possible by eating food, collecting genes, and avoiding (or o
 - **Energy bar** — drains over time and with movement. Eat orange nutrient particles to refill.
 - **Temperature** — cycles between optimal (37°C), heat stress (55–70°C) and cold stress (10–20°C). Off-optimal temperatures multiply energy drain.
 - **Ocean current** — slow background drift; compass arrow (bottom-left) shows direction.
-- **Score** — time × 10 + kills × 100 + current energy.
+- **Score** — time × 10 + kills × 100, consistent during play and on the high-score screen.
 
 ### Genes
 
@@ -33,7 +33,7 @@ Collect floating DNA pickups (max 3 at once). Fission clears your genes and give
 
 - **NPC bacteria** — wander the world; each carries 1–2 genes. Ram them at speed to kill and release their genes.
 - **Predator** (large red eukaryote) — chases when close; engulfs and lyses you unless you have Thick Membrane.
-- **Fission** (F / DIVIDE button) — requires energy > 150. Splits you into two cells; your daughter inherits your genes and wanders freely. You respawn clean at 80% energy.
+- **Fission** (F / DIVIDE button) — requires energy > 150. Splits you into two cells; your daughter inherits your genes and wanders freely. The membrane constricts and the two cells separate along the swimming axis. You continue with 80 energy and empty adaptation slots.
 - **Bacteriocin** (B) — fires an expanding antimicrobial ring; kills nearby cells. 5-second cooldown, costs 30 energy. Toxin gene increases range.
 - **Conjugation** (C) — extend a pilus to a nearby cell and steal one of its genes. Takes ~2 seconds; requires proximity.
 
@@ -43,8 +43,9 @@ Collect floating DNA pickups (max 3 at once). Fission clears your genes and give
 
 ### Mobile
 - **Swipe** anywhere on the left 2/3 of the screen to row — each stroke propels the cell in the swipe direction.
-- **F / B / C** buttons on the right edge for fission, bacteriocin, conjugation.
-- **T** button on the left for tumble (random direction change).
+- **Divide / Burst / Conjugate** buttons on the right edge show energy requirements, cooldowns and availability.
+- **Tumble** button on the left changes direction.
+- **Pause** at the top-right freezes the world. Switching away from the tab also pauses it.
 
 ### Desktop
 | Key | Action |
@@ -92,14 +93,14 @@ Then visit `http://localhost:8080`. Phaser 3 loads from CDN; after that the game
 ## Tech stack
 
 - [Phaser 3](https://phaser.io/) — game engine (CDN)
-- Single `index.html` + `game.js` — no build step, no dependencies
+- `index.html` + `game.js`, with native controls in `hud.js` / `hud.css` — no build step
 - Deploys automatically to [Vercel](https://vercel.com) from this repo
 
 ---
 
 ## Contributing
 
-Pull requests welcome. The entire game is in `game.js` (~1100 lines). Key sections:
+Pull requests welcome. World simulation and cell rendering are in `game.js`; the responsive screen interface is in `hud.js` and `hud.css`. Key sections:
 
 | Section | What it does |
 |---------|-------------|
@@ -118,10 +119,19 @@ Ideas for contribution:
 - Biofilm formation mechanic
 - Quorum sensing — coordinate with NPC cells
 - CRISPR defence against phage pickups
-- Save/load high score
 
 ---
 
 ## Licence
 
 MIT
+
+## Checks
+
+Run the gameplay regression checks with Node.js (only needed for development):
+
+```
+node --test tests/game.test.cjs
+```
+
+Food appears in patches. Nutrient collection animates into the cell, intracellular granules move, and turning eases towards the direction of travel. The native HUD stays independent of the game camera zoom.

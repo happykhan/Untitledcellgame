@@ -1,0 +1,99 @@
+:root { color-scheme: dark; --ink: #ecf2e7; --muted: #b3c4bf; --gold: #ffd078; --surface: #0b121c; }
+body { touch-action: none; }
+.cell-hud { position: fixed; inset: 0; z-index: 10; pointer-events: none; color: var(--ink); font: 14px/1.4 'Trebuchet MS', sans-serif; padding: max(22px, env(safe-area-inset-top)) max(24px, env(safe-area-inset-right)) max(22px, env(safe-area-inset-bottom)) max(24px, env(safe-area-inset-left)); }
+.cell-hud[hidden], .cell-hud [hidden] { display: none !important; }
+.cell-hud button { pointer-events: auto; font: inherit; color: inherit; cursor: pointer; touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+.cell-hud button:focus-visible { outline: 2px solid #fff1c8; outline-offset: 5px; }
+.cell-hud button:disabled { cursor: default; }
+.cell-hud ::selection { background: #ffd078; color: #111721; }
+.hud-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; }
+.energy-panel { width: min(280px, 45vw); padding: 12px 16px; background: var(--surface); border-radius: 10px; }
+.energy-label { display: flex; justify-content: space-between; margin-bottom: 8px; }
+.energy-label strong { color: var(--gold); font-variant-numeric: tabular-nums; }
+.energy-track { height: 6px; position: relative; background: #31404b; border-radius: 2px; }
+.energy-track > div { height: 100%; background: var(--gold); border-radius: 2px; transition: width 150ms linear; }
+.energy-track i { position: absolute; left: 75%; top: -3px; height: 12px; width: 2px; background: #eff6e5; }
+.energy-caption { display: block; color: var(--muted); font-size: 11px; margin-top: 7px; }
+[data-energy="low"] .energy-track > div { background: #ff837d; }
+[data-energy="ready"] .energy-caption { color: var(--gold); }
+.run-info { display: flex; gap: 22px; align-items: center; padding: 10px 12px; background: var(--surface); border-radius: 10px; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.run-info strong { font-size: 20px; color: var(--ink); }
+[data-stress="hot"] { color: #ffab8d; } [data-stress="cold"] { color: #a5d6ff; }
+.cell-hud svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0; }
+.pause-button { border: 0; background: transparent; width: 44px; height: 44px; display: grid; place-items: center; }
+.gene-panel { position: absolute; top: 142px; left: max(24px, env(safe-area-inset-left)); }
+.hud-label { font-size: 11px; color: var(--muted); }
+.gene-slots { display: flex; gap: 7px; margin-top: 8px; }
+.gene-slot { border: 1px solid #3d4d52; padding: 7px 10px; color: var(--muted); background: var(--surface); border-radius: 5px; font-size: 11px; min-width: 52px; text-align: center; }
+.gene-slot.occupied { color: var(--ink); border-color: var(--gene-colour); }
+.lineage { display: block; color: var(--muted); font-size: 11px; margin-top: 9px; }
+.actions { position: absolute; right: max(24px, env(safe-area-inset-right)); bottom: max(24px, env(safe-area-inset-bottom)); display: flex; gap: 10px; }
+.action { display: flex; align-items: center; gap: 12px; min-height: 64px; min-width: 154px; padding: 12px 16px; border: 1px solid #65767b; background: var(--surface); border-radius: 9px; text-align: left; transition: background 160ms, border-color 160ms; }
+.action strong { display: block; font-size: 14px; font-weight: 600; }
+.action small { display: block; font-size: 10px; margin-top: 3px; color: var(--muted); }
+kbd { font: 10px/1.2 'Trebuchet MS', sans-serif; color: var(--muted); margin-left: auto; padding-left: 6px; }
+.action--divide { color: var(--gold) !important; border-color: #b39050; }
+.action--divide:not(:disabled) { background: #332716; border-color: var(--gold); }
+.action--burst:not(:disabled) svg { color: #ffabd0; }
+.action--gene:not(:disabled) svg { color: #a4e9d1; }
+.action:disabled { border-color: #34444b; }
+.action:disabled svg { opacity: 0.5; }
+.action:disabled strong { color: #a4b3b6; }
+.action:not(:disabled):hover { background: #202e38; border-color: #dbe5df; }
+.action:not(:disabled):active { background: #34444a; }
+.movement-panel { position: absolute; left: max(24px, env(safe-area-inset-left)); bottom: max(24px, env(safe-area-inset-bottom)); }
+.action--tumble { min-width: 150px; min-height: 50px; padding: 9px 12px; }
+.movement-hint { display: block; font-size: 11px; color: var(--muted); margin-top: 8px; }
+.hud-message { position: absolute; top: 25%; left: 50%; transform: translateX(-50%); text-align: center; font-size: 15px; color: #fff0c8; text-shadow: 0 2px 8px #000; }
+.pause-banner { position: absolute; inset: 0; background: #070d18ed; display: flex; flex-direction: column; align-items: center; justify-content: center; pointer-events: auto; }
+.pause-banner h1 { font-size: 40px; font-weight: 500; color: var(--gold); margin-bottom: 12px; }
+.pause-banner p { color: var(--muted); margin-bottom: 28px; }
+.pause-banner button { border: 1px solid var(--gold); background: #332716; border-radius: 8px; padding: 14px 24px; }
+@media (max-width: 760px) {
+  .cell-hud { padding: max(14px, env(safe-area-inset-top)) 14px; }
+  .energy-panel { width: 48vw; padding: 10px 12px; }
+  .run-info { gap: 8px; padding: 3px 6px 3px 10px; flex-wrap: wrap; max-width: 43vw; }
+  .run-info strong { font-size: 16px; }
+  [data-temperature] { order: 3; width: 100%; padding-bottom: 5px; font-size: 10px; }
+  .pause-button { width: 36px; height: 36px; }
+  .gene-panel { top: max(120px, calc(env(safe-area-inset-top) + 106px)); left: 14px; }
+  .gene-slots { flex-direction: column; align-items: flex-start; gap: 5px; }
+  .gene-slot { padding: 4px 8px; }
+  .actions { right: max(14px, env(safe-area-inset-right)); bottom: max(18px, env(safe-area-inset-bottom)); flex-direction: column; gap: 8px; }
+  .action { min-width: 118px; min-height: 58px; padding: 10px; gap: 8px; }
+  .action strong { font-size: 12px; }
+  .action small { font-size: 9px; }
+  .action svg { width: 21px; height: 21px; }
+  .action kbd { display: none; }
+  .movement-panel { left: max(14px, env(safe-area-inset-left)); bottom: max(18px, env(safe-area-inset-bottom)); }
+  .action--tumble { min-width: 110px; }
+  .movement-hint { max-width: 145px; font-size: 10px; }
+  .movement-hint { font-size: 0; }
+  .movement-hint::after { content: 'Swipe the water to swim'; font-size: 11px; }
+  .hud-message { top: 32%; width: 70%; font-size: 13px; }
+}
+@media (max-height: 500px) {
+  .gene-panel { top: 115px; }
+  .gene-slots { flex-direction: row; }
+  .gene-slot { font-size: 9px; min-width: 35px; }
+  .actions { flex-direction: row; gap: 6px; right: 14px; bottom: 14px; }
+  .action { min-width: 96px; padding: 8px; }
+  .action kbd, .movement-hint { display: none; }
+  .movement-panel { bottom: 14px; }
+  .action--tumble { min-width: 100px; }
+}
+@media (prefers-reduced-motion: reduce) { .cell-hud * { transition: none !important; } }
+
+.cell-intro { position: fixed; inset: 0; display: grid; place-items: center; background: #070d18ed; z-index: 999; color: var(--ink); font: 14px/1.5 'Trebuchet MS', sans-serif; overflow-y: auto; padding: 24px; }
+.intro-content { width: min(100%, 370px); }
+.intro-content h1 { color: var(--gold); font-size: 28px; font-weight: 600; margin-bottom: 6px; }
+.intro-lead { color: var(--muted); margin-bottom: 28px; }
+.intro-steps { list-style: none; padding: 0; display: grid; gap: 20px; }
+.intro-steps strong { color: var(--gold); display: block; margin-bottom: 3px; }
+.intro-steps span { display: block; }
+.intro-danger { color: #ffad9b; margin-top: 24px; }
+.intro-controls { font-size: 12px; color: var(--muted); line-height: 1.8; margin-top: 24px; }
+.intro-start { display: block; margin-top: 24px; width: 100%; border: 0; border-radius: 7px; padding: 14px 20px; background: var(--gold); color: #151a22; font: 600 14px 'Trebuchet MS', sans-serif; cursor: pointer; }
+.intro-start:hover { background: #ffe1a5; }
+.intro-start:focus-visible { outline: 2px solid #fff; outline-offset: 5px; }
+@media (max-height: 540px) { .intro-content { width: min(100%, 520px); } .intro-lead { margin-bottom: 12px; } .intro-steps { gap: 6px; font-size: 12px; } .intro-steps strong { display: inline; margin-right: 7px; } .intro-steps span { display: inline; } .intro-danger, .intro-controls, .intro-start { margin-top: 12px; } }
