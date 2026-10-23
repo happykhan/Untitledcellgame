@@ -19,8 +19,8 @@ export function createCellResources() {
     dna.push(new T.Vector3(Math.cos(t * Math.PI * 5) * 2.5, -20 + t * 40, Math.sin(t * Math.PI * 5) * 2.5));
   }
   return {
-    rod: capsule(12, 62),
-    daughter: capsule(10, 50),
+    rod: capsule(12, 38),
+    daughter: capsule(10, 32),
     coccus: new T.SphereGeometry(14, 14, 10),
     short: capsule(14, 25),
     filament: capsule(6, 72, 10),
@@ -121,10 +121,10 @@ export function updateCellModel(model, cell, scale, state) {
     body.geometry.computeVertexNormals();
     model.divisionProgress = progress;
   }
-  nucleus.position.y = -progress * 43;
+  nucleus.position.y = -progress * 27;
   if (model.secondNucleus) {
     model.secondNucleus.visible = state.fissioning;
-    model.secondNucleus.position.set(0, progress * 43, 3);
+    model.secondNucleus.position.set(0, progress * 27, 3);
   }
 }
 

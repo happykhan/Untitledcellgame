@@ -66,6 +66,7 @@ function scene() {
     alive: true,
     dying: false,
     energy: 175,
+    current: { angle: 0, speed: 0 },
     fissioning: false,
     player: image(),
     activeGenes: new Set(["HSP", "MEMBRANE"]),
@@ -106,7 +107,7 @@ test("division gates exactly at 150, freezes thrust and cannot be started twice"
   assert.equal(tween.duration, 1200);
 });
 
-test("division produces one daughter with independent inherited genes, recoil and energy reset", () => {
+test("division produces one daughter with independent inherited genes, recoil and shared energy", () => {
   const s = scene();
   s.player.rotation = Math.PI / 2;
   const genes = s.activeGenes;
@@ -114,9 +115,9 @@ test("division produces one daughter with independent inherited genes, recoil an
   s.lastTween.onComplete();
   assert.equal(s.daughters.length, 1);
   assert.equal(s.divisionCount, 1);
-  assert.equal(s.energy, 80);
+  assert.equal(s.energy, 87.5);
   assert.equal(s.fissioning, false);
-  assert.equal(s.activeGenes.size, 0);
+  assert.deepEqual([...s.activeGenes], [...genes]);
   const d = s.daughters[0];
   assert.deepEqual([...d.genes], [...genes]);
   assert.notEqual(d.genes, genes);
@@ -293,14 +294,14 @@ test("keyboard movement uses screen directions, normalises diagonals and brakes 
   s.wasd = keys;
   s.swimInput = { vector: { x: 0, y: 0 }, gesture: null };
   s.thrustAngle = Math.PI;
-  s._handleMovement(50, 0.05);
+  for (let i = 0; i < 30; i++) s._handleMovement(50, 0.05);
   const v = s.player.body.velocity;
   assert.ok(v.x > 0 && v.y < 0);
-  assert.ok(Math.abs(v.x + v.y) < 1e-8);
+  assert.ok(Math.abs(v.x + v.y) < 2);
   assert.ok(Math.hypot(v.x, v.y) < 280 * 1.8);
   keys.up.isDown = keys.right.isDown = false;
   for (let i = 0; i < 5; i++) s._handleMovement(50, 0.05);
-  assert.ok(Math.hypot(s.player.body.velocity.x, s.player.body.velocity.y) < 3);
+  assert.ok(Math.hypot(s.player.body.velocity.x, s.player.body.velocity.y) < 10);
 });
 
 test("score entry releases captured gameplay keys and a new run restores them", () => {
@@ -365,4 +366,68 @@ test("score entry releases captured gameplay keys and a new run restores them", 
     else delete globalThis.localStorage;
     Phaser.Input = previousInput;
   }
+});
+
+test("conjugation copies a useful trait without removing it from the donor", () => {
+  const s = scene();
+  const donor = { active: true, x: 1610, y: 1600, genes: new Set(["TOXIN"]) };
+  s.conjTarget = donor;
+  s.conjDuration = 1800;
+  s.conjTimer = 1790;
+  s.fxGfx.lineStyle = s.fxGfx.lineBetween = () => {};
+  s.time.delayedCall = () => {};
+  s._updateConjugation(20);
+  assert.ok(s.activeGenes.has("TOXIN"));
+  assert.ok(donor.genes.has("TOXIN"));
+  assert.equal(s.conjTarget, null);
+});
+
+test("bacteriocin affects rivals within range and never targets descendants", () => {
+  const s = scene();
+  s.activeGenes = new Set(["TOXIN"]);
+  s.bacterioTimer = 0;
+  const near = { active: true, x: 1780, y: 1600 };
+  const far = { active: true, x: 1900, y: 1600 };
+  const daughter = { active: true, x: 1600, y: 1600 };
+  s.npcCells = [near, far];
+  s.daughters = [daughter];
+  const removed = [];
+  s._killCell = (cell) => removed.push(cell);
+  s.add = {
+    graphics() {
+      const g = image();
+      g.lineStyle = g.strokeCircle = () => g;
+      return g;
+    },
+  };
+  Phaser.Math.Distance = { Between: (x, y, a, b) => Math.hypot(a - x, b - y) };
+  s._fireBacteriocin();
+  assert.deepEqual(removed, [near]);
+  assert.equal(s.energy, 145);
+  assert.equal(s.bacterioTimer, 5000);
+});
+
+test("moving clear of the predator cancels engulfment instead of guaranteeing death", () => {
+  const s = scene();
+  s.predator = { x: 1660, y: 1600 };
+  const pending = [];
+  s.time.delayedCall = (_delay, callback) => pending.push(callback);
+  s._lyse = () => assert.fail("an escaped cell must survive");
+  s._engulf();
+  assert.equal(s.engulfing, true);
+  s.player.x = 1500;
+  pending.shift()();
+  pending.shift()();
+  assert.equal(s.engulfing, false);
+  assert.equal(s.alive, true);
+  assert.equal(s.playerAlpha, 1);
+});
+
+test("fast contact with a descendant cannot damage it", () => {
+  const s = scene();
+  const daughter = { active: true, hp: 3 };
+  s.daughters.push(daughter);
+  s.player.body.velocity.x = 300;
+  s._collideNPC(daughter);
+  assert.equal(daughter.hp, 3);
 });

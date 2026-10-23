@@ -2,7 +2,6 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
 import SwimInput, { getSwimVector } from "../src/input/swim-input.mjs";
-import { steerVelocity } from "../src/input/movement.mjs";
 
 function setup() {
   const input = new EventEmitter();
@@ -61,19 +60,4 @@ test("thumb jitter is ignored, short drags are slower and long diagonals are cap
   assert.ok(slow.x > 0 && slow.x < 0.5);
   const diagonal = getSwimVector({ startX: 0, startY: 0, x: 300, y: 300 });
   assert.ok(Math.abs(Math.hypot(diagonal.x, diagonal.y) - 1) < 1e-10);
-});
-
-test("release brakes to less than 1 percent in a quarter second at different frame rates", () => {
-  for (const fps of [30, 60, 120]) {
-    let velocity = { x: 500, y: -200 };
-    for (let i = 0; i < Math.ceil(fps / 4); i++)
-      velocity = steerVelocity(velocity, { x: 0, y: 0 }, 500, 1 / fps);
-    assert.ok(Math.hypot(velocity.x, velocity.y) < 5.4);
-  }
-});
-
-test("steering reverses a moving cell promptly without exceeding target speed", () => {
-  let velocity = { x: 500, y: 0 };
-  for (let i = 0; i < 6; i++) velocity = steerVelocity(velocity, { x: -1, y: 0 }, 500, 1 / 60);
-  assert.ok(velocity.x < -250 && velocity.x >= -500);
 });

@@ -43,8 +43,8 @@ export function renderWorld(layers, camera, settings, state) {
   const pa = state.playerAlpha;
 
   const stretch = 1 + state.flagSpeed * 0.04;
-  const rx = (9 * settings.cellScale * state.fissionScale.x) / stretch;
-  const ry = 62 * settings.cellScale * state.fissionScale.y * stretch;
+  const rx = (12 * settings.cellScale * state.fissionScale.x) / stretch;
+  const ry = 38 * settings.cellScale * state.fissionScale.y * stretch;
   const angle = state.player.rotation;
 
   if (state.fissioning) {
@@ -75,7 +75,7 @@ export function renderWorld(layers, camera, settings, state) {
     state.activeGenes,
   );
 
-  const pRear = 64 * settings.cellScale;
+  const pRear = 38 * settings.cellScale;
   drawFlagellum(
     fg,
     state.player.x,
@@ -122,7 +122,7 @@ export function renderWorld(layers, camera, settings, state) {
       d.y,
       da,
       8 * settings.cellScale,
-      50 * settings.cellScale,
+      32 * settings.cellScale,
       PAL.daughter,
       1.0,
       d.flagPhase,
@@ -136,7 +136,7 @@ export function renderWorld(layers, camera, settings, state) {
       d.flagPhase,
       PAL.daughter,
       1.0,
-      52 * settings.cellScale,
+      32 * settings.cellScale,
       state.flagSpeed,
       settings.detail,
     );
@@ -242,7 +242,7 @@ export function renderWorld(layers, camera, settings, state) {
           npc.y,
           na,
           8 * settings.cellScale,
-          50 * settings.cellScale,
+          32 * settings.cellScale,
           npc.palette,
           1.0,
           npc.flagPhase,
@@ -256,7 +256,7 @@ export function renderWorld(layers, camera, settings, state) {
           npc.flagPhase,
           npc.palette,
           1.0,
-          52 * settings.cellScale,
+          32 * settings.cellScale,
           state.flagSpeed,
           settings.detail,
         );
@@ -351,8 +351,8 @@ function drawOrganelles(og, px, py, angle, outerColor, alpha, scale, activeGenes
     for (let i = 0; i < segs; i++) {
       const a1 = (i / segs) * Math.PI * 2,
         a2 = ((i + 1) / segs) * Math.PI * 2;
-      const p1 = rot(Math.cos(a1) * 26 * s, Math.sin(a1) * 100 * s);
-      const p2 = rot(Math.cos(a2) * 26 * s, Math.sin(a2) * 100 * s);
+      const p1 = rot(Math.cos(a1) * 26 * s, Math.sin(a1) * 66 * s);
+      const p2 = rot(Math.cos(a2) * 26 * s, Math.sin(a2) * 66 * s);
       og.lineBetween(p1.x, p1.y, p2.x, p2.y);
     }
   }

@@ -15,8 +15,8 @@ export function getSwimmingSpeed(genes) {
   return speed;
 }
 
-export function getRunScore(elapsedMs, kills) {
-  return Math.floor(elapsedMs / 1000) * 10 + kills * 100;
+export function getRunScore(elapsedMs, divisionCount = 0) {
+  return divisionCount * 1000 + Math.floor(elapsedMs / 1000);
 }
 
 export function findConjugationTarget(player, cells, activeGenes) {
@@ -41,4 +41,16 @@ export function getAbilityAvailability(state, conjugationTarget) {
     conjugate: controllable && state.activeGenes.size < MAX_GENES && !state.conjTarget && !!conjugationTarget,
     tumble: controllable && !state.tumbling,
   };
+}
+
+export function getUsefulGene(target, activeGenes) {
+  return target ? [...target.genes].find((key) => !activeGenes.has(key)) : null;
+}
+
+export function getEnergyDrain(genes, temperature, speed) {
+  const baseline = 1 + (genes.has("FLAGELLUM") ? 0.1 : 0) + speed * 0.003;
+  const hot = temperature > 42;
+  const cold = temperature < 30;
+  if (!hot && !cold) return baseline;
+  return baseline * (genes.has(hot ? "HSP" : "CSP") ? 2 : 4);
 }

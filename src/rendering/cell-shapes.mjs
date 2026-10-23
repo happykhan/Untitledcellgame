@@ -174,8 +174,8 @@ export function drawBacteria(g, cx, cy, angle, rx, ry, pal, alpha, phase, detail
 
 // Division keeps a continuous membrane until the final pinch closes.
 export function drawDividingCell(g, cx, cy, angle, scale, progress, pal) {
-  const rx = 9 * scale,
-    ry = (62 + 28 * progress) * scale;
+  const rx = 12 * scale,
+    ry = (38 + 18 * progress) * scale;
   const cos = Math.cos(angle),
     sin = Math.sin(angle);
   const path = (inset = 1) => {
@@ -208,7 +208,7 @@ export function drawDividingCell(g, cx, cy, angle, scale, progress, pal) {
   path(0.7);
   g.strokePath();
   for (const direction of [-1, 1]) {
-    const offset = direction * (10 + 33 * progress) * scale;
+    const offset = direction * (10 + 21 * progress) * scale;
     const x = cx - Math.sin(angle) * offset,
       y = cy + Math.cos(angle) * offset;
     g.fillStyle(pal.nuc, 0.5);

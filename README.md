@@ -1,6 +1,6 @@
 # Untitled Cell Game
 
-A scientifically accurate single-cell survival game in the browser. You play as a *Bacillus* bacterium navigating a microscopic world full of nutrients, rival bacteria, and a eukaryotic predator.
+A simplified learning game about bacterial survival, adaptation and reproduction. You play as a *Bacillus* bacterium navigating a microscopic world full of nutrients, rival bacteria, and a eukaryotic predator.
 
 Built with Phaser 3 gameplay and a Three.js microscopy renderer. No build step or package installation required. Serve the files over HTTP.
 
@@ -10,49 +10,49 @@ Built with Phaser 3 gameplay and a Three.js microscopy renderer. No build step o
 
 ## Gameplay
 
-Survive as long as possible by eating food, collecting genes, and avoiding (or outsmarting) the predator.
+Grow your lineage by finding nutrients, coping with environmental stress and reproducing. A successful division produces a descendant that inherits your traits. The score gives 1,000 points per descendant plus one point per second survived; killing rivals earns no points.
 
 - **Energy bar** — drains over time and with movement. Eat orange nutrient particles to refill.
 - **Temperature** — cycles between optimal (37°C), heat stress (55–70°C) and cold stress (10–20°C). Off-optimal temperatures multiply energy drain.
-- **Ocean current** — slow background drift; compass arrow (bottom-left) shows direction.
-- **Score** — time × 10 + kills × 100, consistent during play and on the high-score screen.
+- **Fluid motion** — the body turns before thrust follows its long axis. Strong drag damps sideways slip; releasing the control lets the cell settle into the ambient current. Tumble briefly reorients in place.
+- **Lineage** — the persistent goal shows descendants produced and the next action. Earlier kill-based scores stay stored separately from the new lineage leaderboard.
 
 ### Genes
 
-Collect floating DNA pickups (max 3 at once). Fission clears your genes and gives you a fresh start.
+Take up floating DNA through **transformation**, or copy a useful trait from a living neighbour through **conjugation**. The donor retains its copy. The model allows three traits at once; both cells keep their traits after fission.
 
 | Symbol | Gene | Effect |
 |--------|------|--------|
 | H | Heat Shock Proteins | Halve drain during high temp |
 | C | Cold Shock Proteins | Halve drain during low temp |
 | F | Extra Flagellum | +40% speed, slight extra drain |
-| M | Thick Membrane | Survive predator longer, −15% speed |
+| M | Thick Membrane | More time to swim clear of a predator, −15% speed |
 | T | Toxin Secretion | Larger bacteriocin range |
 
 ### Mechanics
 
-- **NPC bacteria** — wander the world; each carries 1–2 genes. Ram them at speed to kill and release their genes.
-- **Predator** (large red eukaryote) — chases when close; engulfs and lyses you unless you have Thick Membrane.
-- **Fission** (F / DIVIDE button) — requires energy > 150. Splits you into two cells; your daughter inherits your genes and wanders freely. The membrane constricts and the two cells separate along the swimming axis. You continue with 80 energy and empty adaptation slots.
-- **Bacteriocin** (B) — fires an expanding antimicrobial ring; kills nearby cells. 5-second cooldown, costs 30 energy. Toxin gene increases range.
-- **Conjugation** (C) — extend a pilus to a nearby cell and steal one of its genes. Takes ~2 seconds; requires proximity.
+- **NPC bacteria** — wander the world; each carries 1–2 genes. They compete for nutrients and can donate useful genes. Fast repeated contacts or bacteriocin can kill rivals and release DNA, but do not earn points.
+- **Predator** (large red eukaryote) — chases when close. Contact starts engulfment; swim clear before it completes. The Protection trait gives more escape time.
+- **Fission** (F / DIVIDE button) — requires energy > 150. Splits you into two cells; both cells retain your traits, and the daughter wanders and feeds. The membrane constricts and the two cells separate along the swimming axis. Your remaining energy is halved; your adaptation slots stay filled.
+- **Bacteriocin** (B) — fires an expanding antimicrobial ring; affects nearby rival bacteria and spares descendants. 5-second cooldown, costs 30 energy. Toxin gene increases range.
+- **Conjugation** (C) — extend a pilus to a nearby cell and copy one of its useful genes without removing the donor copy. Takes ~2 seconds; requires proximity.
 
 ---
 
 ## Controls
 
 ### Mobile
-- **Hold and drag** the water to steer continuously. Short drags swim slowly; longer drags reach full speed. Release to brake. The stick follows your first finger.
+- **Hold and drag** the water to aim your swimming direction. The cell turns and then swims along its body axis. Short drags swim slowly; longer drags reach full speed. Release to stop active swimming; ambient flow remains. The stick follows your first finger.
 - **Tumble / Conjugate / Burst / Divide** sit in a right-thumb cluster. Use a second finger for abilities while steering. Disabled buttons indicate unavailable abilities.
 - **Pause** at the top-right freezes the world. Switching away from the tab also pauses it.
 
 ### Desktop
 | Key | Action |
 |-----|--------|
-| W / ↑ | Move up |
-| S / ↓ | Move down |
-| A / ← | Move left |
-| D / → | Move right |
+| W / ↑ | Aim up and swim |
+| S / ↓ | Aim down and swim |
+| A / ← | Aim left and swim |
+| D / → | Aim right and swim |
 | Space | Tumble |
 | F | Fission |
 | B | Bacteriocin |
@@ -141,3 +141,12 @@ Food appears in patches. Nutrient collection animates into the cell, intracellul
 Append `?stats=1` for opt-in frame-rate, draw-call, triangle and resource diagnostics. These are browser/engine observations, not a physical-phone or GPU-timer benchmark. `?renderer=2d` exercises the fallback. Both flags are development aids; the default game has no diagnostics panel.
 
 The renderer receives appearance snapshots and uses the Phaser scene clock. The 3D view does not start its own animation loop. See [architecture notes](docs/architecture.md) and [vendor provenance](vendor/README.md).
+
+
+## Learning intent and model limits
+
+The loop connects nutrient uptake to energy, energy to reproduction, and reproduction to inheritance. Temperature tolerance and motility illustrate that traits have context-dependent benefits and costs. Living neighbours offer a non-lethal route to a useful trait through conjugation; loose DNA uptake is labelled transformation. Bacteriocin illustrates costly competition for shared nutrients. Protective-envelope behaviour gives time to escape predation in this model.
+
+This is a deliberately simplified learning game, not a validated biological simulator. A single abstract trait represents many possible molecular mechanisms. Transfer compatibility, nutrient chemistry, mutation, population genetics and offspring energy budgets are not modelled. Three trait slots, timed environmental stress, predator escape timing, selectable swimming directions and scores are gameplay abstractions. There is no claim that all bacteria can acquire every depicted trait or that all envelopes protect against predation. Daughters feed and wander but do not autonomously divide or experience the full player survival model.
+
+The swimming model takes its qualitative reference from forward runs, brief reorientation and strong viscous drag described in [Hydrodynamics and direction change of tumbling bacteria](https://www.repository.cam.ac.uk/items/57235bb4-18bc-4587-8c3f-1d6de2c36835). It is tuned for mobile play rather than reproducing measured bacterial trajectories.

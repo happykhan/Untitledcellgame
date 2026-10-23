@@ -5,6 +5,7 @@ import {
   getAbilityAvailability,
   getRunScore,
   getSwimmingSpeed,
+  getEnergyDrain,
 } from "../src/domain/game-rules.mjs";
 import createHudState from "../src/ui/create-hud-state.mjs";
 import { createWorldRenderState } from "../src/rendering/create-world-render-state.mjs";
@@ -74,7 +75,7 @@ test("conjugation selects the nearest live cell with an unowned gene inside rang
   assert.equal(findConjugationTarget({ x: 0, y: 0 }, [duplicate, distant, dead], new Set(["HSP"])), null);
 });
 
-test("swimming speed composes gene effects consistently for keys and swipes", () => {
+test("swimming speed composes gene effects consistently for keyboard and held steering", () => {
   assert.equal(getSwimmingSpeed(new Set()), 280);
   assert.equal(getSwimmingSpeed(new Set(["FLAGELLUM", "MEMBRANE"])), 280 * 1.4 * 0.85);
 });
@@ -94,16 +95,16 @@ test("render snapshots contain appearance only and cannot mutate physics or gene
   assert.equal(run.fissionScale.x, 1);
 });
 
-test("score derives from active simulation time and the HUD uses the same formula", () => {
-  assert.equal(getRunScore(12999, 2), 320);
-  const hud = createHudState(state({ elapsedMs: 12999 }));
-  assert.equal(hud.score, 320);
+test("lineage scoring rewards reproduction rather than kills and agrees with the HUD", () => {
+  assert.equal(getRunScore(12999, 2), 2012);
+  const hud = createHudState(state({ elapsedMs: 12999, divisionCount: 2, killCount: 99 }));
+  assert.equal(hud.score, 2012);
 });
 
 test("score storage rejects malformed records and preserves the best twenty", () => {
   const values = new Map();
   const storage = { getItem: (key) => values.get(key), setItem: (key, value) => values.set(key, value) };
-  values.set("ucg_scores", JSON.stringify([null, {}, { name: "bad", score: 1 }]));
+  values.set("ucg_lineage_scores", JSON.stringify([null, {}, { name: "bad", score: 1 }]));
   assert.deepEqual(loadScoreboard(storage).scores, []);
   for (let score = 0; score < 25; score++)
     saveRunScore({ name: "test", score, elapsed: score, kills: 0 }, storage);
@@ -125,4 +126,20 @@ test("unavailable storage never prevents another run", () => {
   };
   assert.deepEqual(loadScoreboard(storage), { scores: [], lastName: "" });
   assert.doesNotThrow(() => saveRunScore({ name: "test", score: 10, elapsed: 1, kills: 0 }, storage));
+});
+
+test("temperature traits have a measurable benefit, while motility has an energy cost", () => {
+  const noGenes = new Set();
+  assert.equal(getEnergyDrain(new Set(["HSP"]), 55, 100), getEnergyDrain(noGenes, 55, 100) / 2);
+  assert.equal(getEnergyDrain(new Set(["CSP"]), 15, 100), getEnergyDrain(noGenes, 15, 100) / 2);
+  assert.equal(getEnergyDrain(new Set(["HSP"]), 15, 100), getEnergyDrain(noGenes, 15, 100));
+  assert.ok(getEnergyDrain(new Set(["FLAGELLUM"]), 37, 100) > getEnergyDrain(noGenes, 37, 100));
+});
+
+test("the conjugation action previews the exact useful donor trait", () => {
+  const run = state({
+    activeGenes: new Set(["HSP"]),
+    npcCells: [{ x: 20, y: 0, active: true, genes: new Set(["HSP", "FLAGELLUM"]) }],
+  });
+  assert.equal(createHudState(run).actions.gene.detail, "Copy Motility");
 });

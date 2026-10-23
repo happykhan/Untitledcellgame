@@ -14,12 +14,12 @@ export function showInstructions({ isMobile, onStart }) {
   div.setAttribute("aria-labelledby", "intro-title");
   div.innerHTML = `
       <div class="intro-content">
-        <h1 id="intro-title">Survive</h1>
-        <p class="intro-lead">One cell. A whole world to navigate.</p>
+        <h1 id="intro-title">Live. Adapt. Multiply.</h1>
+        <p class="intro-lead">Build a lineage in a changing microscopic world.</p>
         <ol class="intro-steps">
-          <li><strong>Feed</strong><span>Swim through orange nutrients to restore energy.</span></li>
-          <li><strong>Adapt</strong><span>Collect DNA diamonds. Carry up to three adaptations.</span></li>
-          <li><strong>Divide</strong><span>Build over 150 energy, then release a daughter carrying your adaptations.</span></li>
+          <li><strong>Feed</strong><span>Nutrients supply energy. Swimming and stress spend it.</span></li>
+          <li><strong>Adapt</strong><span>Take up loose DNA, or conjugate with a neighbour to copy a useful trait.</span></li>
+          <li><strong>Divide</strong><span>Build over 150 energy. Divide into two cells that both keep your traits. Each descendant earns 1,000 points.</span></li>
         </ol>
         <p class="intro-danger">Keep clear of the large red predator.</p>
         <p class="intro-controls">${isMobile ? "Hold and drag to steer. Release to stop. Use your other thumb for abilities." : "WASD / arrows move · drag to steer · Space tumble<br>F divide · B burst · C conjugate"}</p>
@@ -46,7 +46,7 @@ export function showInstructions({ isMobile, onStart }) {
   };
 }
 
-export function showGameOver({ reason, elapsed, kills, score, scores, lastName, onPlayAgain }) {
+export function showGameOver({ reason, elapsed, divisions = 0, score, scores, lastName, onPlayAgain }) {
   const top5 = [...scores].sort((a, b) => b.score - a.score).slice(0, 5);
   const lbRows = top5.length
     ? top5
@@ -55,7 +55,7 @@ export function showGameOver({ reason, elapsed, kills, score, scores, lastName, 
           <div style="display:flex;justify-content:space-between;gap:16px;
             color:${i === 0 ? "#ffd060" : "#aaccbb"};font-size:13px;padding:3px 0;border-bottom:1px solid #1a1a2a">
             <span>${i + 1}. ${escapeHtml(s.name || "ANON")}</span>
-            <span>${s.score}pts &nbsp; ${s.elapsed}s &nbsp; ${s.kills}k</span>
+            <span>${s.score}pts &nbsp; ${s.divisions || 0} offspring</span>
           </div>`,
         )
         .join("")
@@ -73,7 +73,7 @@ export function showGameOver({ reason, elapsed, kills, score, scores, lastName, 
         width:calc(100% - 48px);text-align:center;line-height:1.7;">
         <div style="font-size:24px;font-weight:bold;color:#ff2244;letter-spacing:2px;margin-bottom:4px">
           ${reason || "DEAD"}</div>
-        <div style="font-size:13px;color:#aaccbb;margin-bottom:2px">${elapsed}s &nbsp;·&nbsp; ${kills} kills</div>
+        <div style="font-size:13px;color:#aaccbb;margin-bottom:2px">${elapsed}s &nbsp;·&nbsp; ${divisions} descendants</div>
         <div style="font-size:26px;font-weight:bold;color:#ffd060;margin-bottom:18px">${score} pts</div>
 
         <input id="ucg-name" type="text" maxlength="16" placeholder="your name"
@@ -83,7 +83,7 @@ export function showGameOver({ reason, elapsed, kills, score, scores, lastName, 
             color:#ffd060;font-family:monospace,Courier New;font-size:16px;
             padding:8px 12px;text-align:center;outline:none;margin-bottom:18px"/>
 
-        <div style="font-size:10px;color:#556677;letter-spacing:2px;margin-bottom:8px">HIGH SCORES</div>
+        <div style="font-size:10px;color:#556677;letter-spacing:2px;margin-bottom:8px">LINEAGE SCORES</div>
         <div style="margin-bottom:20px;padding:8px 12px;background:#05050f;border-radius:6px;text-align:left">
           ${lbRows}</div>
 

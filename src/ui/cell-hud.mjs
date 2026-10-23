@@ -24,7 +24,8 @@ export default class CellHUD {
         </div>
         <div class="run-info"><span><strong data-score>0</strong> pts</span><span data-temperature>37°C</span><button class="pause-button" data-action="pause" aria-label="Pause game">${icon("pause")}</button></div>
       </div>
-      <div class="gene-panel"><span class="hud-label">Adaptations</span><div class="gene-slots">${[0, 1, 2].map(() => '<div class="gene-slot"><span>Empty</span></div>').join("")}</div><span class="lineage" data-lineage>First generation</span></div>
+      <div class="life-goal"><strong>Grow your lineage</strong><span data-lineage>0 descendants produced</span><small data-goal>Feed to build energy for division</small></div>
+      <div class="gene-panel"><span class="hud-label">Adaptations</span><div class="gene-slots">${[0, 1, 2].map(() => '<div class="gene-slot"><span>Empty</span></div>').join("")}</div></div>
       <div class="hud-message" role="status" aria-live="polite"></div>
       <div class="movement-panel"><span class="movement-hint">WASD / arrows to move · drag to steer</span></div>
       <div class="actions">
@@ -42,6 +43,7 @@ export default class CellHUD {
     this.score = this.root.querySelector("[data-score]");
     this.temperature = this.root.querySelector("[data-temperature]");
     this.lineage = this.root.querySelector("[data-lineage]");
+    this.goal = this.root.querySelector("[data-goal]");
     this.slots = [...this.root.querySelectorAll(".gene-slot")];
     this.buttons = Object.fromEntries(
       [...this.root.querySelectorAll("[data-action]")].map((button) => [button.dataset.action, button]),
@@ -82,6 +84,7 @@ export default class CellHUD {
     this.temperature.textContent = state.temperature;
     this.temperature.dataset.stress = state.temperatureStress;
     this.lineage.textContent = state.lineage;
+    this.goal.textContent = state.goal;
     for (const [name, action] of Object.entries(state.actions)) {
       this.buttons[name].disabled = !action.enabled;
       this.buttons[name].querySelector("small").textContent = action.detail;
@@ -95,7 +98,7 @@ export default class CellHUD {
 
   notify(text, time) {
     this.message.textContent = text;
-    this.messageUntil = time + 2600;
+    this.messageUntil = time + 5200;
   }
 
   updateGenes(genes) {
@@ -109,8 +112,8 @@ export default class CellHUD {
         "--gene-colour",
         gene ? "#" + gene.color.toString(16).padStart(6, "0") : "#80938d",
       );
-      slot.textContent = gene ? `${gene.symbol} · ${gene.desc}` : "Empty";
-      slot.title = gene ? gene.desc : "Collect a floating DNA pickup";
+      slot.textContent = gene ? `${gene.symbol} · ${gene.desc} · ${gene.short}` : "Empty";
+      slot.title = gene ? gene.effect : "Collect a floating DNA pickup";
     });
   }
 

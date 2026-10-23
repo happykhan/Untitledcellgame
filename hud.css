@@ -136,3 +136,30 @@ canvas:not(.world-3d) { z-index: 1; }
   .energy-panel { width: 52%; flex-shrink: 0; }
   .run-info { flex: 1; min-width: 0; max-width: none; }
 }
+
+.life-goal { position: absolute; top: 24px; left: 50%; transform: translateX(-50%); text-align: center; }
+.life-goal strong { display: block; font-size: 17px; color: var(--gold); font-weight: 600; }
+.life-goal span, .life-goal small { display: block; font-size: 12px; margin-top: 3px; }
+.life-goal small { color: var(--muted); }
+.gene-slot { max-width: 230px; white-space: normal; }
+@media (max-width: 1000px) {
+  .life-goal { top: 112px; left: 14px; right: 14px; transform: none; text-align: left; }
+  .life-goal strong { display: inline; font-size: 14px; }
+  .life-goal span { display: inline; margin-left: 12px; font-size: 11px; }
+  .life-goal small { font-size: 12px; }
+  .gene-panel { top: 180px; }
+  .gene-slot { max-width: 195px; }
+}
+@media (max-height: 500px) {
+  .life-goal { top: 108px; }
+  .gene-panel { top: 168px; }
+  .gene-slots { flex-direction: column; }
+  .gene-slot { max-width: 180px; font-size: 10px; }
+}
+@media (pointer: coarse), (max-width: 760px) {
+  .hud-message { top: auto; bottom: max(210px, calc(env(safe-area-inset-bottom) + 190px)); left: 14px; right: 14px; width: auto; transform: none; font-size: 13px; }
+  .gene-slot { max-width: min(44vw, 195px); }
+}
+@media (max-height: 500px) {
+  .hud-message { top: auto; bottom: max(16px, env(safe-area-inset-bottom)); left: 142px; right: 202px; width: auto; transform: none; font-size: 12px; }
+}

@@ -190,7 +190,16 @@ export default class MicroscopeRenderer {
     const cos = Math.cos(cell.rotation),
       sin = Math.sin(cell.rotation);
     const count = kind === "predator" ? 10 : kind === "coccus" ? 4 : 8;
-    const halfLength = kind === "predator" ? 35 : kind === "coccus" ? 8 : kind === "short" ? 14 : 42;
+    const halfLength =
+      kind === "predator"
+        ? 35
+        : kind === "coccus"
+          ? 8
+          : kind === "short"
+            ? 14
+            : kind === "rod" || kind === "daughter"
+              ? 24
+              : 42;
     for (let i = 0; i < count; i++) {
       const x = Math.sin(i * 4.2 + state.flagPhase * 0.05) * (kind === "predator" ? 35 : 5);
       const y = Math.cos(i * 2.7) * halfLength;
@@ -211,15 +220,18 @@ export default class MicroscopeRenderer {
       return;
     }
     if (kind === "coccus") return;
-    const rear = { rod: 62, daughter: 50, short: 25, filament: 72, vibrio: 36 }[kind] || 62;
+    const rear = { rod: 38, daughter: 32, short: 25, filament: 72, vibrio: 36 }[kind] || 62;
     const strands = id === "player" && state.activeGenes.has("FLAGELLUM") ? 2 : 1;
     for (let strand = 0; strand < strands; strand++) {
       let px = cell.x - Math.sin(cell.rotation) * rear * scale;
       let py = -cell.y - Math.cos(cell.rotation) * rear * scale;
       for (let i = 1; i <= 18; i++) {
         const t = i / 18;
+        const bend = id === "player" ? -(state.turnRate || 0) * 4 * t * t : 0;
         const wave =
-          Math.sin((cell.flagPhase ?? state.flagPhase) + t * 8 + strand * 2) * 4 * (1 - t * 0.4) + strand * 4;
+          bend +
+          Math.sin((cell.flagPhase ?? state.flagPhase) + t * 8 + strand * 2) * 4 * (1 - t * 0.4) +
+          strand * 4;
         const x = cell.x + (-sin * (rear + t * 58) + cos * wave) * scale;
         const y = -cell.y - (cos * (rear + t * 58) + sin * wave) * scale;
         this.filaments.segment(px, py, 0, x, y, 0, colour);

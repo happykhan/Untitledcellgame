@@ -1,4 +1,5 @@
-const SCORE_KEY = "ucg_scores";
+// Keep earlier kill-based records intact, but rank the new lineage rules separately.
+const SCORE_KEY = "ucg_lineage_scores";
 const NAME_KEY = "ucg_last_name";
 
 function isScore(entry) {

@@ -1,4 +1,4 @@
-import { steerVelocity } from "./input/movement.mjs";
+import { swimInFluid } from "./input/movement.mjs";
 import { GENES, GENE_KEYS, WORLD_W, WORLD_H, getViewportSettings } from "./config.mjs";
 import { NPC_PALS, getPlayerPalette } from "./rendering/palettes.mjs";
 import createWorldView from "./rendering/create-world-view.mjs";
@@ -8,7 +8,9 @@ import {
   getAbilityAvailability,
   getRunScore,
   getSwimmingSpeed,
+  getEnergyDrain,
   findConjugationTarget,
+  getUsefulGene,
   CONJUGATION_RANGE,
 } from "./domain/game-rules.mjs";
 import { loadScoreboard, saveRunScore } from "./domain/score-store.mjs";
@@ -36,10 +38,10 @@ export default class GameScene extends Phaser.Scene {
     this.player
       .setAlpha(0)
       .setCollideWorldBounds(true)
-      .setBounce(1, 1)
-      .setDamping(true)
-      .setDrag(0.32)
-      .setMaxVelocity(340)
+      .setBounce(0, 0)
+      .setDamping(false)
+      .setDrag(0)
+      .setMaxVelocity(500)
       .setDepth(10);
     this.player.body.setCircle(16, -14, -14);
 
@@ -63,6 +65,9 @@ export default class GameScene extends Phaser.Scene {
       .setMaxVelocity(150)
       .setDepth(8);
     this.predator.body.setCircle(58, -56, -56);
+    // Give the first feeding/transfer attempt room before predation becomes a threat.
+    if (Math.hypot(this.predator.x - this.player.x, this.predator.y - this.player.y) < 600)
+      this.predator.setPosition(WORLD_W / 2 - 800, WORLD_H / 2 - 600);
 
     this.daughters = [];
 
@@ -111,6 +116,8 @@ export default class GameScene extends Phaser.Scene {
     this.nextHudUpdate = 0;
     this.closeOverlay = null;
     this.killCount = 0;
+    this.turnRate = 0;
+    this.tumbleDirection = 1;
     this.thrustAngle = -Math.PI / 2; // initially pointing up
     this.fissionScale = { x: 1, y: 1 };
     this.fissionProgress = 0;
@@ -121,7 +128,7 @@ export default class GameScene extends Phaser.Scene {
     // Ocean current — slow drift that shifts direction over time
     this.current = {
       angle: Math.random() * Math.PI * 2,
-      speed: 20,
+      speed: 12,
       changeTimer: 0,
       changeInterval: 18000,
       targetAngle: Math.random() * Math.PI * 2,
@@ -191,8 +198,6 @@ export default class GameScene extends Phaser.Scene {
     }
     this.current.angle += (this.current.targetAngle - this.current.angle) * 0.0008 * delta;
     if (!this.fissioning) {
-      this.player.body.velocity.x += Math.cos(this.current.angle) * this.current.speed * dt;
-      this.player.body.velocity.y += Math.sin(this.current.angle) * this.current.speed * dt;
       if (Phaser.Input.Keyboard.JustDown(this.wasd.fiss)) this._triggerFission();
       if (Phaser.Input.Keyboard.JustDown(this.wasd.bact)) this._fireBacteriocin();
       if (Phaser.Input.Keyboard.JustDown(this.wasd.conj)) this._startConjugation();
@@ -207,17 +212,26 @@ export default class GameScene extends Phaser.Scene {
       const r = Math.random();
       this.targetTemp = r < 0.33 ? Phaser.Math.Between(55, 70) : r < 0.66 ? Phaser.Math.Between(10, 20) : 37;
     }
+    const previousStress = this.temp > 42 ? "hot" : this.temp < 30 ? "cold" : "normal";
     this.temp += (this.targetTemp - this.temp) * dt * 0.3;
+    const stress = this.temp > 42 ? "hot" : this.temp < 30 ? "cold" : "normal";
+    if (stress !== previousStress && stress !== "normal") {
+      const protectedCell = this.activeGenes.has(stress === "hot" ? "HSP" : "CSP");
+      this.hud.notify(
+        protectedCell
+          ? "Your tolerance trait halves this temperature stress cost"
+          : "Temperature stress: energy drains faster. Seek a tolerance trait.",
+        this.time.now,
+      );
+    }
   }
 
   _updateEnergy(dt) {
-    let drain = 1.0;
-    if (this.activeGenes.has("FLAGELLUM")) drain += 0.1;
-    const speed = Math.hypot(this.player.body.velocity.x, this.player.body.velocity.y);
-    drain += speed * 0.003;
-    const isHot = this.temp > 42,
-      isCold = this.temp < 30;
-    if (isHot || isCold) drain *= (isHot ? this.activeGenes.has("HSP") : this.activeGenes.has("CSP")) ? 2 : 4;
+    const drain = getEnergyDrain(
+      this.activeGenes,
+      this.temp,
+      Math.hypot(this.player.body.velocity.x, this.player.body.velocity.y),
+    );
     this.energy -= drain * dt;
 
     if (this.energy < 30 && !this.dyingPulse) {
@@ -242,7 +256,6 @@ export default class GameScene extends Phaser.Scene {
     const tumbleKey = this.cursors.space.isDown || this.wasd.space.isDown;
     if (tumbleKey) this._tumble();
     if (this.tumbling) {
-      this.thrustAngle += this.tumbleAngle * dt;
       this.tumbleTimer -= delta;
       if (this.tumbleTimer <= 0) this.tumbling = false;
     }
@@ -260,20 +273,26 @@ export default class GameScene extends Phaser.Scene {
       const length = Math.hypot(x, y) || 1;
       direction = { x: x / length, y: y / length };
     }
-    const velocity = steerVelocity(this.player.body.velocity, direction, baseSpeed * 1.8, dt);
+    const motion = swimInFluid({
+      heading: this.player.rotation - Math.PI / 2,
+      turnRate: this.turnRate,
+      velocity: this.player.body.velocity,
+      direction,
+      speed: baseSpeed,
+      current: {
+        x: Math.cos(this.current.angle) * this.current.speed,
+        y: Math.sin(this.current.angle) * this.current.speed,
+      },
+      dt,
+      tumbling: this.tumbling,
+      tumbleDirection: this.tumbleDirection,
+    });
+    this.turnRate = motion.turnRate;
+    this.thrustAngle = motion.heading;
+    this.player.rotation = motion.heading + Math.PI / 2;
     this.player.body.setAcceleration(0, 0);
-    this.player.body.setVelocity(velocity.x, velocity.y);
-    const power = Math.hypot(direction.x, direction.y);
-    if (power) this.thrustAngle = Math.atan2(direction.y, direction.x);
-    this.flagSpeed = power;
-
-    // Cell visual rotation always follows actual velocity (inertia)
-    const vx = this.player.body.velocity.x,
-      vy = this.player.body.velocity.y;
-    if (Math.hypot(vx, vy) > 18) {
-      const target = Math.atan2(vy, vx) + Math.PI / 2;
-      this.player.rotation = Phaser.Math.Angle.RotateTo(this.player.rotation, target, dt * 7);
-    }
+    this.player.body.setVelocity(motion.velocity.x, motion.velocity.y);
+    this.flagSpeed = motion.activity;
   }
 
   _eatFood(player, food) {
@@ -312,7 +331,7 @@ export default class GameScene extends Phaser.Scene {
     }
     pick.destroy();
     this.activeGenes.add(key);
-    this.hud.notify("Adaptation acquired: " + GENES[key].desc, this.time.now);
+    this.hud.notify("DNA uptake (transformation): " + GENES[key].effect, this.time.now);
     if (this.dyingPulse && this.energy > 30) {
       this.dyingPulse = false;
       this.playerAlpha = 1.0;
@@ -347,7 +366,14 @@ export default class GameScene extends Phaser.Scene {
       npc.wanderTimer = 0;
       npc.flagPhase = Math.random() * Math.PI * 2;
       npc.angle = 0;
+      if (i === 0) {
+        npc.setPosition(WORLD_W / 2 + 80, WORLD_H / 2 - 80);
+        npc.genes = new Set(["FLAGELLUM"]);
+      }
       this.npcCells.push(npc);
+      this.physics.add.overlap(npc, this.foodGroup, (_cell, food) => {
+        if (food.active) food.destroy();
+      });
       this.physics.add.overlap(this.player, npc, () => this._collideNPC(npc), null, this);
     }
   }
@@ -363,15 +389,37 @@ export default class GameScene extends Phaser.Scene {
       if (npc.wanderTimer <= 0) {
         npc.wanderDir += (Math.random() - 0.5) * 1.2;
         npc.wanderTimer = 1000 + Math.random() * 2000;
-        npc.body.setVelocity(Math.cos(npc.wanderDir) * 70, Math.sin(npc.wanderDir) * 70);
       }
-      npc.angle = Phaser.Math.RadToDeg(npc.wanderDir) + 90;
+      this._swimNeighbour(npc, 70, delta / 1000);
       npc.flagPhase += (0.09 * delta) / 16.667;
     }
   }
 
+  _swimNeighbour(cell, speed, dt) {
+    const motion = swimInFluid({
+      heading: cell.rotation - Math.PI / 2,
+      turnRate: cell.turnRate || 0,
+      velocity: cell.body.velocity,
+      direction:
+        this.conjTarget === cell
+          ? { x: 0, y: 0 }
+          : { x: Math.cos(cell.wanderDir), y: Math.sin(cell.wanderDir) },
+      speed: speed * (cell.genes.has("FLAGELLUM") ? 1.4 : 1),
+      current: {
+        x: Math.cos(this.current.angle) * this.current.speed,
+        y: Math.sin(this.current.angle) * this.current.speed,
+      },
+      dt,
+    });
+    cell.turnRate = motion.turnRate;
+    cell.rotation = motion.heading + Math.PI / 2;
+    cell.body.setVelocity(motion.velocity.x, motion.velocity.y);
+  }
+
   _collideNPC(npc) {
-    if (!npc || !npc.active) return;
+    if (!npc || !npc.active || this.daughters.includes(npc)) return;
+    if (this.time.now < (npc.nextContactAt || 0)) return;
+    npc.nextContactAt = this.time.now + 700;
     if (Math.hypot(this.player.body.velocity.x, this.player.body.velocity.y) < 200) return;
     npc.hp--;
     if (npc.hp <= 0) this._killCell(npc);
@@ -435,7 +483,8 @@ export default class GameScene extends Phaser.Scene {
       ease: "Power2",
       onComplete: () => ring.destroy(),
     });
-    [...this.npcCells, ...this.daughters].forEach((c) => {
+    this.hud.notify("Bacteriocin: clears rival bacteria · costs 30 energy", this.time.now);
+    this.npcCells.forEach((c) => {
       if (c.active && Phaser.Math.Distance.Between(px, py, c.x, c.y) < range) this._killCell(c);
     });
   }
@@ -449,6 +498,7 @@ export default class GameScene extends Phaser.Scene {
     if (!getAbilityAvailability(this, target).conjugate) return;
     this.conjTarget = target;
     this.conjTimer = 0;
+    this.hud.notify("Conjugation: stay close to copy a useful trait", this.time.now);
   }
 
   _updateConjugation(delta) {
@@ -472,10 +522,10 @@ export default class GameScene extends Phaser.Scene {
       this.fxGfx.clear();
       const geneArr = [...this.conjTarget.genes].filter((key) => !this.activeGenes.has(key));
       if (geneArr.length > 0 && this.activeGenes.size < 3) {
-        const key = geneArr[Math.floor(Math.random() * geneArr.length)];
+        const key = getUsefulGene(this.conjTarget, this.activeGenes);
         if (!this.activeGenes.has(key)) {
           this.activeGenes.add(key);
-          this.conjTarget.genes.delete(key);
+          this.hud.notify("Gene copied: " + GENES[key].effect + ". The donor keeps its copy.", this.time.now);
           this.playerAlpha = 0.4;
           this.time.delayedCall(150, () => {
             this.playerAlpha = 1.0;
@@ -502,10 +552,24 @@ export default class GameScene extends Phaser.Scene {
 
   _engulf() {
     if (this.engulfing || this.fissioning || this.dying) return;
+    if (this.time.now < (this.predator.safeUntil || 0)) return;
     this.engulfing = true;
+    this.hud.notify(
+      this.activeGenes.has("MEMBRANE")
+        ? "Protective envelope: time to swim clear"
+        : "Predator contact: swim clear now",
+      this.time.now,
+    );
     const resist = this.activeGenes.has("MEMBRANE");
     let pulseCount = resist ? 6 : 2;
     const doPulse = () => {
+      if (Math.hypot(this.player.x - this.predator.x, this.player.y - this.predator.y) > 88) {
+        this.engulfing = false;
+        this.playerAlpha = 1;
+        this.predator.safeUntil = this.time.now + 1200;
+        this.hud.notify("Escaped predation", this.time.now);
+        return;
+      }
       if (pulseCount-- <= 0 || !this.alive) {
         if (this.alive) this._lyse("LYSED BY PREDATOR");
         return;
@@ -637,6 +701,9 @@ export default class GameScene extends Phaser.Scene {
     d.flagPhase = 0;
     d.angle = Phaser.Math.RadToDeg(this.player.rotation);
     this.daughters.push(d);
+    this.physics.add.overlap(d, this.foodGroup, (_cell, food) => {
+      if (food.active) food.destroy();
+    });
 
     const a = Math.atan2(dy, dx);
     d.body.setVelocity(Math.cos(a) * 120, Math.sin(a) * 120);
@@ -644,12 +711,11 @@ export default class GameScene extends Phaser.Scene {
     this.physics.add.overlap(this.player, d, () => this._collideNPC(d), null, this);
 
     this.divisionCount++;
-    this.hud.notify("Division complete · daughter released", this.time.now);
+    this.hud.notify("Binary fission: both cells inherited your traits · +1 descendant", this.time.now);
     this.feedGlow = 1;
     this.fissionScale = { x: 1, y: 0.75 };
     this.tweens.add({ targets: this.fissionScale, y: 1, duration: 450, ease: "Sine.easeOut" });
-    this.energy = 80;
-    this.activeGenes = new Set();
+    this.energy = Math.max(50, this.energy / 2);
     this.dyingPulse = false;
     this.playerAlpha = 1.0;
     this.fissioning = false;
@@ -666,9 +732,8 @@ export default class GameScene extends Phaser.Scene {
       if (d.wanderTimer <= 0) {
         d.wanderDir += (Math.random() - 0.5) * 1.5;
         d.wanderTimer = 900 + Math.random() * 1500;
-        d.body.setVelocity(Math.cos(d.wanderDir) * 80, Math.sin(d.wanderDir) * 80);
       }
-      d.angle = Phaser.Math.RadToDeg(d.wanderDir) + 90;
+      this._swimNeighbour(d, 80, delta / 1000);
       d.flagPhase += (0.1 * delta) / 16.667;
     }
   }
@@ -702,11 +767,11 @@ export default class GameScene extends Phaser.Scene {
     if (!getAbilityAvailability(this, null).tumble) return;
     this.tumbling = true;
     this.tumbleTimer = 400;
-    this.tumbleAngle = (Math.random() < 0.5 ? -1 : 1) * (Math.PI * 0.5 + Math.random() * Math.PI);
+    const direction = this.swimInput.vector;
+    const desired = Math.atan2(direction.y, direction.x);
+    const difference = Math.atan2(Math.sin(desired - this.thrustAngle), Math.cos(desired - this.thrustAngle));
+    this.tumbleDirection = Math.hypot(direction.x, direction.y) > 0 ? Math.sign(difference) || 1 : 1;
     this.player.body.setAcceleration(0, 0);
-    const angle = this.thrustAngle + (Math.sign(this.tumbleAngle) * Math.PI) / 2;
-    const speed = getSwimmingSpeed(this.activeGenes) * 1.8;
-    this.player.body.setVelocity(Math.cos(angle) * speed, Math.sin(angle) * speed);
   }
 
   _setupTouch() {
@@ -796,16 +861,24 @@ export default class GameScene extends Phaser.Scene {
     this.swimInput.reset();
     this.hud.root.hidden = true;
     const elapsed = Math.floor(this.elapsedMs / 1000);
-    const score = getRunScore(this.elapsedMs, this.killCount);
+    const score = getRunScore(this.elapsedMs, this.divisionCount);
     this.closeOverlay?.();
     this.closeOverlay = showGameOver({
       reason,
       elapsed,
       score,
       kills: this.killCount,
+      divisions: this.divisionCount,
       ...loadScoreboard(),
       onPlayAgain: (name) => {
-        saveRunScore({ name, score, elapsed, kills: this.killCount, date: Date.now() });
+        saveRunScore({
+          name,
+          score,
+          elapsed,
+          kills: this.killCount,
+          divisions: this.divisionCount,
+          date: Date.now(),
+        });
         this.scene.restart();
       },
     });
