@@ -42,18 +42,17 @@ Collect floating DNA pickups (max 3 at once). Fission clears your genes and give
 ## Controls
 
 ### Mobile
-- **Swipe** anywhere on the left 2/3 of the screen to row — each stroke propels the cell in the swipe direction.
-- **Divide / Burst / Conjugate** buttons on the right edge show energy requirements, cooldowns and availability.
-- **Tumble** button on the left changes direction.
+- **Hold and drag** the water to steer continuously. Short drags swim slowly; longer drags reach full speed. Release to brake. The stick follows your first finger.
+- **Tumble / Conjugate / Burst / Divide** sit in a right-thumb cluster. Use a second finger for abilities while steering. Disabled buttons indicate unavailable abilities.
 - **Pause** at the top-right freezes the world. Switching away from the tab also pauses it.
 
 ### Desktop
 | Key | Action |
 |-----|--------|
-| W / ↑ | Thrust forward |
-| S / ↓ | Reverse |
-| A / ← | Rotate left |
-| D / → | Rotate right |
+| W / ↑ | Move up |
+| S / ↓ | Move down |
+| A / ← | Move left |
+| D / → | Move right |
 | Space | Tumble |
 | F | Fission |
 | B | Bacteriocin |
@@ -71,7 +70,7 @@ The main world uses a fixed orthographic Three.js camera with flat gameplay move
 - **Division**: the player's own 3D membrane stretches and constricts before the daughter separates.
 - **Water**: a dim fluid field, batched background organisms and soft depth particles.
 
-Mobile rendering uses capped drawing-buffer pixels, shared geometry, instanced pickups/granules, batched flagella and a single lighting pass. No shadow maps, transmission/refraction or full-screen blur are used. The native HUD and SVG swipe guide stay at screen resolution. The world stops submitting frames during pause and after a round finishes.
+Mobile rendering uses capped drawing-buffer pixels, shared geometry, instanced pickups/granules, batched flagella and a single lighting pass. No shadow maps, transmission/refraction or full-screen blur are used. The native HUD and SVG steering stick stay at screen resolution. The world stops submitting frames during pause and after a round finishes.
 
 If WebGL2 is unavailable or its context is lost, the existing 2D view takes over. Restart tries 3D again. Phone-sized browser checks have passed; physical-phone frame time and battery usage have not been measured.
 
@@ -109,7 +108,7 @@ Pull requests welcome. The code separates gameplay, rendering and interface owne
 | `src/domain/game-rules.mjs` | Shared action rules, swimming speed and scoring |
 | `src/rendering/` | Cell geometry, palettes and world drawing from appearance snapshots |
 | `src/ui/` | HUD display values, DOM controls and run screens |
-| `src/input/swim-input.mjs` | Swipe ownership, cancellation and event cleanup |
+| `src/input/swim-input.mjs` | Held steering ownership, cancellation and event cleanup |
 | `src/domain/score-store.mjs` | Validated local high-score persistence |
 
 The HUD receives display data and named callbacks rather than the simulation scene. Rendering receives appearance snapshots without physics bodies. See [architecture notes](docs/architecture.md) for the rendering decision and remaining integration boundaries.

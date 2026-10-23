@@ -22,7 +22,7 @@ export function showInstructions({ isMobile, onStart }) {
           <li><strong>Divide</strong><span>Build over 150 energy, then release a daughter carrying your adaptations.</span></li>
         </ol>
         <p class="intro-danger">Keep clear of the large red predator.</p>
-        <p class="intro-controls">${isMobile ? "Swipe the water to swim. Use the buttons to tumble, burst or conjugate." : "W / ↑ swim · A / D steer · Space tumble<br>F divide · B burst · C conjugate"}</p>
+        <p class="intro-controls">${isMobile ? "Hold and drag to steer. Release to stop. Use your other thumb for abilities." : "WASD / arrows move · drag to steer · Space tumble<br>F divide · B burst · C conjugate"}</p>
         <button class="intro-start">Start swimming</button>
       </div>`;
 

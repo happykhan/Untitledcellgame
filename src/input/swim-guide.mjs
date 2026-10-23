@@ -1,3 +1,4 @@
+import { getSwimVector, STICK_RADIUS } from "./swim-input.mjs";
 const SVG = "http://www.w3.org/2000/svg";
 
 export default class SwimGuide {
@@ -6,39 +7,33 @@ export default class SwimGuide {
     this.root.classList.add("swim-guide");
     this.root.setAttribute("aria-hidden", "true");
     this.circle = document.createElementNS(SVG, "circle");
-    this.circle.setAttribute("r", "24");
-    this.circle.setAttribute("fill", "none");
-    this.circle.setAttribute("stroke", "#c5e6df");
-    this.circle.setAttribute("stroke-opacity", "0.35");
-    this.path = document.createElementNS(SVG, "path");
-    this.path.setAttribute("fill", "none");
-    this.path.setAttribute("stroke", "#ffd078");
-    this.path.setAttribute("stroke-width", "2");
-    this.path.setAttribute("stroke-linecap", "round");
-    this.root.append(this.circle, this.path);
+    this.circle.setAttribute("r", STICK_RADIUS);
+    this.circle.setAttribute("fill", "#0b121ccc");
+    this.circle.setAttribute("stroke", "#b3c4bf");
+    this.circle.setAttribute("stroke-opacity", "0.65");
+    this.knob = document.createElementNS(SVG, "circle");
+    this.knob.setAttribute("r", "20");
+    this.knob.setAttribute("fill", "#ffd078");
+    this.root.append(this.circle, this.knob);
     document.body.appendChild(this.root);
     this.clear();
   }
 
   update(gesture) {
-    if (!gesture) {
-      this.clear();
-      return;
-    }
-    this.root.style.display = "block";
-    const { startX, startY, x, y } = gesture;
-    const angle = Math.atan2(y - startY, x - startX);
+    this.root.classList.toggle("is-active", !!gesture);
+    const startX = gesture?.startX ?? Math.max(68, 18 + STICK_RADIUS);
+    const startY = gesture?.startY ?? window.innerHeight - 92;
+    const vector = getSwimVector(gesture);
     this.circle.setAttribute("cx", startX);
     this.circle.setAttribute("cy", startY);
-    this.path.setAttribute(
-      "d",
-      `M${startX},${startY} L${x},${y} M${x - Math.cos(angle - 0.45) * 11},${y - Math.sin(angle - 0.45) * 11} L${x},${y} L${x - Math.cos(angle + 0.45) * 11},${y - Math.sin(angle + 0.45) * 11}`,
-    );
+    this.knob.setAttribute("cx", startX + vector.x * 30);
+    this.knob.setAttribute("cy", startY + vector.y * 30);
   }
 
   clear() {
-    this.root.style.display = "none";
+    this.update(null);
   }
+
   destroy() {
     this.root.remove();
   }

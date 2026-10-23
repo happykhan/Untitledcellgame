@@ -6,6 +6,7 @@ const config = {
   transparent: true,
   width: window.innerWidth,
   height: window.innerHeight,
+  input: { activePointers: 3 },
   physics: { default: "arcade", arcade: { debug: false } },
   scene: [BootScene, GameScene],
   scale: { mode: Phaser.Scale.NONE, autoCenter: Phaser.Scale.NO_CENTER, parent: document.body },

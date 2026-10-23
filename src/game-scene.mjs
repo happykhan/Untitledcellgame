@@ -1,3 +1,4 @@
+import { steerVelocity } from "./input/movement.mjs";
 import { GENES, GENE_KEYS, WORLD_W, WORLD_H, getViewportSettings } from "./config.mjs";
 import { NPC_PALS, getPlayerPalette } from "./rendering/palettes.mjs";
 import createWorldView from "./rendering/create-world-view.mjs";
@@ -251,26 +252,20 @@ export default class GameScene extends Phaser.Scene {
     const left = this.cursors.left.isDown || this.wasd.left.isDown;
     const right = this.cursors.right.isDown || this.wasd.right.isDown;
 
-    // A/D steer the thrust angle, not the cell body directly
-    if (left) this.thrustAngle -= 3 * dt * 60 * (Math.PI / 180);
-    if (right) this.thrustAngle += 3 * dt * 60 * (Math.PI / 180);
-
-    if (up) {
-      this.player.body.setAcceleration(
-        Math.cos(this.thrustAngle) * baseSpeed * 2,
-        Math.sin(this.thrustAngle) * baseSpeed * 2,
-      );
-      this.flagSpeed = 1.0;
-    } else if (down) {
-      this.player.body.setAcceleration(
-        Math.cos(this.thrustAngle + Math.PI) * baseSpeed,
-        Math.sin(this.thrustAngle + Math.PI) * baseSpeed,
-      );
-      this.flagSpeed = 0.5;
-    } else {
-      this.player.body.setAcceleration(0, 0);
-      this.flagSpeed = Math.max(0, this.flagSpeed - dt * 1.8);
+    const touch = this.swimInput.vector;
+    let direction = touch;
+    if (!this.swimInput.gesture) {
+      const x = Number(right) - Number(left);
+      const y = Number(down) - Number(up);
+      const length = Math.hypot(x, y) || 1;
+      direction = { x: x / length, y: y / length };
     }
+    const velocity = steerVelocity(this.player.body.velocity, direction, baseSpeed * 1.8, dt);
+    this.player.body.setAcceleration(0, 0);
+    this.player.body.setVelocity(velocity.x, velocity.y);
+    const power = Math.hypot(direction.x, direction.y);
+    if (power) this.thrustAngle = Math.atan2(direction.y, direction.x);
+    this.flagSpeed = power;
 
     // Cell visual rotation always follows actual velocity (inertia)
     const vx = this.player.body.velocity.x,
@@ -598,6 +593,7 @@ export default class GameScene extends Phaser.Scene {
 
   _triggerFission() {
     if (!getAbilityAvailability(this, null).divide) return;
+    this.swimInput.reset();
     this.fissioning = true;
     this.fissionProgress = 0;
     this.conjTarget = null;
@@ -708,6 +704,9 @@ export default class GameScene extends Phaser.Scene {
     this.tumbleTimer = 400;
     this.tumbleAngle = (Math.random() < 0.5 ? -1 : 1) * (Math.PI * 0.5 + Math.random() * Math.PI);
     this.player.body.setAcceleration(0, 0);
+    const angle = this.thrustAngle + (Math.sign(this.tumbleAngle) * Math.PI) / 2;
+    const speed = getSwimmingSpeed(this.activeGenes) * 1.8;
+    this.player.body.setVelocity(Math.cos(angle) * speed, Math.sin(angle) * speed);
   }
 
   _setupTouch() {
@@ -715,19 +714,7 @@ export default class GameScene extends Phaser.Scene {
       input: this.input,
       guide: new SwimGuide(),
       canSwim: () => canControlCell(this),
-      onStroke: (dx, dy) => this._swim(dx, dy),
     });
-  }
-
-  _swim(dx, dy) {
-    if (!canControlCell(this)) return;
-    const distance = Math.hypot(dx, dy);
-    const power = Math.min(distance, 100) / 100;
-    const speed = getSwimmingSpeed(this.activeGenes);
-    this.player.body.velocity.x += (dx / distance) * speed * 1.8 * power;
-    this.player.body.velocity.y += (dy / distance) * speed * 1.8 * power;
-    this.thrustAngle = Math.atan2(dy, dx);
-    this.flagSpeed = power;
   }
 
   _setupKeyboard() {

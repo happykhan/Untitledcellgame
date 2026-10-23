@@ -77,6 +77,7 @@ function scene() {
     fxGfx: { clear() {} },
     time: { now: 0 },
     hud: { notify() {} },
+    swimInput: { reset() {} },
     viewport: getViewportSettings(1200, 800),
     tweens: {
       add(config) {
@@ -277,4 +278,27 @@ test("the starting food patch is explicit even when a previous player object exi
   s._spawnFood(1, patch);
   assert.ok(Math.hypot(positions[0].x - patch.x, positions[0].y - patch.y) <= 150);
   assert.deepEqual(patch, { x: 1700, y: 1400 });
+});
+
+test("keyboard movement uses screen directions, normalises diagonals and brakes on release", () => {
+  const s = scene();
+  const keys = {
+    up: { isDown: true },
+    down: { isDown: false },
+    left: { isDown: false },
+    right: { isDown: true },
+    space: { isDown: false },
+  };
+  s.cursors = keys;
+  s.wasd = keys;
+  s.swimInput = { vector: { x: 0, y: 0 }, gesture: null };
+  s.thrustAngle = Math.PI;
+  s._handleMovement(50, 0.05);
+  const v = s.player.body.velocity;
+  assert.ok(v.x > 0 && v.y < 0);
+  assert.ok(Math.abs(v.x + v.y) < 1e-8);
+  assert.ok(Math.hypot(v.x, v.y) < 280 * 1.8);
+  keys.up.isDown = keys.right.isDown = false;
+  for (let i = 0; i < 5; i++) s._handleMovement(50, 0.05);
+  assert.ok(Math.hypot(s.player.body.velocity.x, s.player.body.velocity.y) < 3);
 });

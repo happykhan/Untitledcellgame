@@ -26,8 +26,9 @@ export default class CellHUD {
       </div>
       <div class="gene-panel"><span class="hud-label">Adaptations</span><div class="gene-slots">${[0, 1, 2].map(() => '<div class="gene-slot"><span>Empty</span></div>').join("")}</div><span class="lineage" data-lineage>First generation</span></div>
       <div class="hud-message" role="status" aria-live="polite"></div>
-      <div class="movement-panel">${action("tumble", "Tumble", "Space", "Change direction")}<span class="movement-hint">W / ↑ swim · A / D steer</span></div>
+      <div class="movement-panel"><span class="movement-hint">WASD / arrows to move · drag to steer</span></div>
       <div class="actions">
+        ${action("tumble", "Tumble", "Space", "Change direction")}
         ${action("gene", "Conjugate", "C", "Find a nearby cell")}
         ${action("burst", "Burst", "B", "30 energy")}
         ${action("divide", "Divide", "F", "Over 150 energy")}

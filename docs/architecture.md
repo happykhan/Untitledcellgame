@@ -4,11 +4,11 @@ The game uses Phaser 3 for gameplay, Arcade bodies, input and small transient ef
 
 ## One owner per responsibility
 
-A native button invokes a named callback supplied by GameScene. Keyboard commands invoke the same operation. Both command guards and HUD display values use `getAbilityAvailability`. Swipe input supplies a displacement; the scene applies the shared swimming-speed rule.
+A native button invokes a named callback supplied by GameScene. Keyboard commands invoke the same operation. Both command guards and HUD display values use `getAbilityAvailability`. Held pointer input supplies a dead-zone filtered, capped direction vector; the scene applies shared swimming speed with frame-rate independent response and release braking. WASD/arrows supply a normalised direction. Three Phaser pointers support abilities while steering; cancellation and focus loss clear the gesture.
 
 GameScene owns active simulation time. HUD and final score use `getRunScore`; neither adjusts the clock using wall time. The scene submits appearance snapshots to the world view. The world is drawn on the Phaser scene's render event, after its camera updates. This keeps 3D objects and 2D effect positions aligned and avoids a second animation loop.
 
-The Three.js canvas is the only WebGL context. Phaser uses a transparent Canvas renderer above it for transient effects and pointer input. The DOM HUD and SVG swipe guide remain independent of camera zoom and rendering resolution.
+The Three.js canvas is the only WebGL context. Phaser uses a transparent Canvas renderer above it for transient effects and pointer input. The DOM HUD and SVG steering guide remain independent of camera zoom and rendering resolution.
 
 ## 3D appearance
 
@@ -28,11 +28,11 @@ Physics, input and scene updates still run through Phaser. The graphics limits d
 
 WebGL2 denial or context loss switches the same simulation to the retained 2D view. Pickup visibility is switched with the renderer so hidden simulation objects stay visible in the fallback. A restart tries a fresh 3D context.
 
-Scene shutdown disposes shared and private geometry, materials, instanced buffers and textures; removes the world canvas, swipe guide and DOM overlays; and unsubscribes render/document/pointer listeners. The 3D context is released when it is still live. One restarted scene has one world canvas, one Phaser canvas, one HUD and one swipe guide.
+Scene shutdown disposes shared and private geometry, materials, instanced buffers and textures; removes the world canvas, steering guide and DOM overlays; and unsubscribes render/document/pointer listeners. The 3D context is released when it is still live. One restarted scene has one world canvas, one Phaser canvas, one HUD and one steering guide.
 
 ## Verification
 
-Run `node --test tests/*.test.mjs`. Tests cover gameplay boundaries, inherited genes, shape deformation, render-state isolation, pixel budgets at phone/high-DPI/landscape dimensions, coordinate mapping, batch capacity and shared disposal. Browser checks cover actual rendering, phone/landscape layouts, swipe input, division, pause, restart and forced context loss.
+Run `node --test tests/*.test.mjs`. Tests cover gameplay boundaries, inherited genes, shape deformation, render-state isolation, pixel budgets at phone/high-DPI/landscape dimensions, coordinate mapping, batch capacity and shared disposal. Browser checks cover actual rendering, phone/landscape layouts, held steering, division, pause, restart and forced context loss.
 
 Append `?stats=1` for opt-in engine frame-rate, draw-call, triangle and resource readings. Append `?renderer=2d` to exercise the fallback without WebGL. Neither flag appears in the default play UI.
 
